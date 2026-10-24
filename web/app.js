@@ -302,29 +302,41 @@ function animateOrb() {
   rafId = requestAnimationFrame(animateOrb);
 }
 
-/** One finished phrase → Gemini transcript → sent to the agent as the caller's words. */
-async function handlePhrase(wav) {
+/** Starts a Gemini transcription of a phrase; abortable in case the caller keeps talking. */
+function requestTranscript(wav) {
+  const ctrl = new AbortController();
+  const text = fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav, signal: ctrl.signal })
+    .then((res) => res.json())
+    .then((data) => data.text || "")
+    .catch((err) => (err.name === "AbortError" ? "" : (console.error(err), "")));
+  return { text, abort: () => ctrl.abort() };
+}
+
+/** Shows the caller's words and hands them to the agent (phrases stay in order). */
+async function deliver(request) {
   const bubble = addMessage("…", "user pending");
   setLabel("label.hearing");
-  try {
-    const res = await fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
-    const { text } = await res.json();
-    if (!text || !conversation) return bubble.remove();
-    bubble.textContent = text;
-    bubble.classList.remove("pending");
-    conversation.sendUserMessage(text);
-  } catch (err) {
-    console.error(err);
-    bubble.remove();
-  }
+  const text = await request.text;
+  if (!text || !conversation) return bubble.remove();
+  bubble.textContent = text;
+  bubble.classList.remove("pending");
+  conversation.sendUserMessage(text);
 }
 
 async function startListening() {
+  let early = null; // transcription started during the short pause before the phrase is confirmed over
   try {
     conversation.setMicMuted(true); // the agent gets our transcripts instead of its own recognition
     listener = await createListener({
       onStart: () => conversation?.sendUserActivity(),
-      onPhrase: (wav) => (sttChain = sttChain.then(() => handlePhrase(wav))),
+      onEarly: (wav) => (early = requestTranscript(wav)),
+      onResume: () => { early?.abort(); early = null; },
+      onPhrase: (wav, sameAsEarly) => {
+        const request = sameAsEarly && early ? early : requestTranscript(wav);
+        if (early && early !== request) early.abort();
+        early = null;
+        sttChain = sttChain.then(() => deliver(request));
+      },
       isPaused: () => agentSpeaking || Date.now() < resumeAt,
     });
   } catch (err) {

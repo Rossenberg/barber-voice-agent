@@ -26,7 +26,10 @@ const VOICES = {
 
 const AGENT = {
   name: "Blade Barbershop — voice assistant",
-  llm: "gemini-3.8-flash", // won the Armenian test in ~/voice-agent-demo (scripts/armenian-lab.mjs)
+  // Flash-Lite with no thinking: fastest first reply; Armenian replies were fine in scripts/llm-lab.mjs.
+  // gemini-3.8-flash (the ~/voice-agent-demo winner) took 1.1–1.6 s per reply on real calls.
+  llm: "gemini-3.5-flash-lite",
+  reasoningEffort: "minimal",
   ttsModel: "eleven_v4_turbo", // ~100 ms, speaks Armenian; Flash/Multilingual v2 don't
   maxDurationSec: 240,
   dailyCallLimit: 150,
@@ -163,6 +166,7 @@ async function ensureAgent() {
         prompt: {
           prompt: readFileSync(join(ROOT, "agent/system-prompt.md"), "utf8"),
           llm: AGENT.llm,
+          reasoning_effort: AGENT.reasoningEffort,
           temperature: 0.3,
           tool_ids: Object.values(state.tools),
           built_in_tools: { end_call: systemTool("end_call"), language_detection: systemTool("language_detection") },

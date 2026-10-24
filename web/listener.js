@@ -5,7 +5,8 @@
 const RATE = 16000;
 const FRAME = 320; // 20 ms at 16 kHz
 const START_FRAMES = 3; // 60 ms of voice starts a phrase
-const END_FRAMES = 20; // 400 ms of silence ends it
+const EARLY_FRAMES = 10; // after 200 ms of silence, start transcribing in advance
+const END_FRAMES = 15; // 300 ms of silence ends the phrase
 const PRE_ROLL = 15; // keep 300 ms before the start so the first syllable isn't cut
 const MIN_VOICE_FRAMES = 12; // ignore clicks shorter than 240 ms of voice
 const MAX_FRAMES = 15 * 50; // force-end after 15 s
@@ -29,9 +30,12 @@ function toWav(samples) {
 }
 
 /**
- * @param {{ onStart?: () => void, onPhrase: (wav: Blob) => void, isPaused: () => boolean }} handlers
+ * onEarly fires after a short pause with the audio so far, so transcription can start before the phrase is
+ * certainly over; onPhrase then confirms it (same audio if the caller stayed silent), and onResume says the
+ * caller kept talking and the early audio should be dropped.
+ * @param {{ onStart?: () => void, onEarly?: (wav: Blob) => void, onResume?: () => void, onPhrase: (wav: Blob, sameAsEarly: boolean) => void, isPaused: () => boolean }} handlers
  */
-export async function createListener({ onStart, onPhrase, isPaused }) {
+export async function createListener({ onStart, onEarly, onResume, onPhrase, isPaused }) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   const ctx = new AudioContext();
   await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
@@ -46,12 +50,12 @@ export async function createListener({ onStart, onPhrase, isPaused }) {
   let carry = new Float32Array(0); // resampled samples waiting to fill a frame
   let pos = 0; // fractional read position for resampling
   let floor = 0.004; // adaptive background-noise level
-  let speaking = false, voiceRun = 0, silenceRun = 0, voiceFrames = 0;
+  let speaking = false, voiceRun = 0, silenceRun = 0, voiceFrames = 0, earlySent = false;
   let pre = [], phrase = [];
   const state = { level: 0 };
 
   function reset() {
-    speaking = false; voiceRun = 0; silenceRun = 0; voiceFrames = 0; phrase = []; pre = [];
+    speaking = false; voiceRun = 0; silenceRun = 0; voiceFrames = 0; phrase = []; pre = []; earlySent = false;
   }
 
   function onFrame(frame) {
@@ -75,16 +79,28 @@ export async function createListener({ onStart, onPhrase, isPaused }) {
       return;
     }
     phrase.push(frame);
-    if (voiced) { voiceFrames++; silenceRun = 0; } else silenceRun++;
+    if (voiced) {
+      voiceFrames++;
+      silenceRun = 0;
+      if (earlySent) { earlySent = false; onResume?.(); }
+    } else silenceRun++;
+    const enough = voiceFrames >= MIN_VOICE_FRAMES;
+    // The audio up to the start of this pause (plus 100 ms), identical for the early and the final call.
+    const audio = () => {
+      const frames = phrase.slice(0, phrase.length - silenceRun + 5);
+      const all = new Float32Array(frames.length * FRAME);
+      frames.forEach((f, i) => all.set(f, i * FRAME));
+      return toWav(all);
+    };
+    if (silenceRun === EARLY_FRAMES && enough && onEarly) {
+      earlySent = true;
+      onEarly(audio());
+    }
     if (silenceRun >= END_FRAMES || phrase.length >= MAX_FRAMES) {
-      const enough = voiceFrames >= MIN_VOICE_FRAMES;
-      const frames = phrase.slice(0, phrase.length - Math.max(0, silenceRun - 5)); // trim trailing silence
+      const wav = enough ? audio() : null;
+      const sameAsEarly = earlySent && silenceRun >= END_FRAMES;
       reset();
-      if (enough) {
-        const all = new Float32Array(frames.length * FRAME);
-        frames.forEach((f, i) => all.set(f, i * FRAME));
-        onPhrase(toWav(all));
-      }
+      if (wav) onPhrase(wav, sameAsEarly);
     }
   }
 
