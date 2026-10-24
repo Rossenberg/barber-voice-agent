@@ -174,6 +174,8 @@ async function ensureAgent() {
         Object.entries(AGENT.languages).map(([code, l]) => [code, { overrides: { agent: { first_message: l.firstMessage, language: code } } }]),
       ),
       conversation: { max_duration_seconds: AGENT.maxDurationSec },
+      // the page sends Gemini transcripts (~2 s after the caller stops), so wait longer before "are you there?"
+      turn: { turn_timeout: 15 },
     },
     platform_settings: {
       auth: { enable_auth: false, allowlist: SITE_HOSTS.map((hostname) => ({ hostname })) },

@@ -1,4 +1,5 @@
 import { Conversation } from "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.26.0/+esm";
+import { createListener } from "/listener.js";
 
 const MAX_CALL_SEC = 240; // matches the agent's max_duration_seconds
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -22,6 +23,7 @@ const T = {
     "label.connected": "Միացված է, խոսեք",
     "label.speaking": "Խոսում է…",
     "label.listening": "Լսում է…",
+    "label.hearing": "Հասկանում է…",
     "label.ended": "Զանգն ավարտվեց։ Կարող եք կրկին զանգել։",
     "label.micBlocked": "Միկրոֆոնն արգելափակված է։ Թույլատրեք այն զննարկչում և կրկին փորձեք։",
     "label.error": "Չհաջողվեց միանալ, փորձեք մի քիչ հետո։",
@@ -75,6 +77,7 @@ const T = {
     "label.connected": "Соединено, говорите",
     "label.speaking": "Говорит…",
     "label.listening": "Слушает…",
+    "label.hearing": "Распознаёт…",
     "label.ended": "Звонок завершён. Можно позвонить ещё раз.",
     "label.micBlocked": "Микрофон заблокирован. Разрешите его в браузере и попробуйте снова.",
     "label.error": "Не удалось соединиться, попробуйте чуть позже.",
@@ -128,6 +131,7 @@ const T = {
     "label.connected": "Connected, go ahead",
     "label.speaking": "Speaking…",
     "label.listening": "Listening…",
+    "label.hearing": "Understanding…",
     "label.ended": "Call ended. You can call again.",
     "label.micBlocked": "The microphone is blocked. Allow it in your browser and try again.",
     "label.error": "Couldn’t connect, please try again in a moment.",
@@ -181,6 +185,8 @@ let config = null; // from /api/public/config
 let conversation = null;
 let connecting = false;
 let timerId = null, rafId = null;
+let listener = null; // our own speech recognition (see listener.js)
+let agentSpeaking = false, resumeAt = 0, sttChain = Promise.resolve();
 let labelKey = "label.idle";
 
 const t = (key) => T[lang][key] ?? T.hy[key] ?? key;
@@ -288,9 +294,40 @@ function startTimer() {
 
 function animateOrb() {
   if (!conversation) return;
-  const level = Math.min(1, Math.max(conversation.getOutputVolume?.() ?? 0, (conversation.getInputVolume?.() ?? 0) * 0.6) * 2.2);
+  const level = Math.min(1, Math.max((conversation.getOutputVolume?.() ?? 0) * 2.2, (listener?.state.level ?? 0) * 0.8));
   orb.style.setProperty("--level", level.toFixed(3));
   rafId = requestAnimationFrame(animateOrb);
+}
+
+/** One finished phrase → Gemini transcript → sent to the agent as the caller's words. */
+async function handlePhrase(wav) {
+  const bubble = addMessage("…", "user pending");
+  setLabel("label.hearing");
+  try {
+    const res = await fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+    const { text } = await res.json();
+    if (!text || !conversation) return bubble.remove();
+    bubble.textContent = text;
+    bubble.classList.remove("pending");
+    conversation.sendUserMessage(text);
+  } catch (err) {
+    console.error(err);
+    bubble.remove();
+  }
+}
+
+async function startListening() {
+  try {
+    conversation.setMicMuted(true); // the agent gets our transcripts instead of its own recognition
+    listener = await createListener({
+      onStart: () => conversation?.sendUserActivity(),
+      onPhrase: (wav) => (sttChain = sttChain.then(() => handlePhrase(wav))),
+      isPaused: () => agentSpeaking || Date.now() < resumeAt,
+    });
+  } catch (err) {
+    console.error("own recognition unavailable, falling back to the agent's", err);
+    conversation?.setMicMuted(false);
+  }
 }
 
 function resetUi(key) {
@@ -345,6 +382,7 @@ async function start() {
   }
 
   transcript.replaceChildren();
+  agentSpeaking = false;
   const pendingTools = {};
   const toolLabel = (name) => ({ check_availability: t("tool.check"), create_booking: t("tool.book") })[name];
 
@@ -361,6 +399,8 @@ async function start() {
       },
       onDisconnect: () => {
         conversation = null;
+        listener?.stop();
+        listener = null;
         resetUi("label.ended");
       },
       onError: (message) => {
@@ -369,13 +409,16 @@ async function start() {
       },
       onModeChange: ({ mode }) => {
         orb.dataset.mode = mode === "speaking" ? "speaking" : "listening";
+        agentSpeaking = mode === "speaking";
+        if (!agentSpeaking) resumeAt = Date.now() + 300; // let the echo of the agent's voice die down
         setLabel(mode === "speaking" ? "label.speaking" : "label.listening");
       },
       onMessage: ({ message, role, source }) => {
         const who = role ?? (source === "ai" ? "agent" : "user");
+        if (who === "user") return; // we already show our own transcript
         // Strip expressive voice tags like "[happy]" that the TTS model uses.
         const text = message?.replace(/\[[a-z ]{2,20}\]\s*/gi, "").trim();
-        if (text) addMessage(text, who === "user" ? "user" : "agent");
+        if (text) addMessage(text, "agent");
       },
       onAgentToolRequest: (req) => {
         const labels = toolLabel(req?.tool_name);
@@ -391,6 +434,7 @@ async function start() {
         delete pendingTools[key];
       },
     });
+    await startListening();
   } catch (err) {
     console.error(err);
     conversation = null;

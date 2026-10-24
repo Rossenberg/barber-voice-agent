@@ -282,3 +282,5 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space
   .ico .wave, .ico .digit { opacity: 1; }
   .ico .tick { stroke-dashoffset: 0; }
 }
+
+.msg.user.pending { opacity: 0.6; letter-spacing: 0.2em; animation: pop 0.25s ease, blink 1s infinite; }

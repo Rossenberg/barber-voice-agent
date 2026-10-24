@@ -20,6 +20,7 @@ interface Env {
   TOOL_SECRET: string; // ElevenLabs webhook tools send "Authorization: Bearer <TOOL_SECRET>"
   ADMIN_PASSWORD: string; // dashboard login
   SESSION_SECRET: string; // signs dashboard session tokens
+  GEMINI_API_KEY: string; // speech-to-text (ElevenLabs' realtime recognition is weak on spoken Armenian)
 }
 
 interface Settings {
@@ -204,6 +205,69 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
   return { success: true, booking_id: bookingId, phone_saved: Boolean(phone), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}` };
 }
 
+// ---------------------------------------------------------------- speech-to-text
+
+// Flash-Lite and Flash both got real calls right; Gemini's response time swings between 1.5 and 5 s,
+// so we ask both at once and take whichever answers first (each costs a fraction of a cent).
+const STT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash"];
+const STT_TIMEOUT_MS = 9000;
+const MAX_AUDIO_BYTES = 1_000_000; // ~30 s of 16 kHz mono WAV
+
+// Deliberately no hints about what the assistant just asked: in testing that made the model invent
+// phone digits that were never said.
+const STT_PROMPT = [
+  "Transcribe this phone-call utterance verbatim. The caller is phoning a barbershop in Yerevan.",
+  "They usually speak colloquial Eastern Armenian (slang like ախպեր ջան, էգուց, կարամ գամ, թրաշս դզեմ, ֆեյդ, մաշինկայով), sometimes Russian or English.",
+  "Words you will often hear: վաղը, էգուց, էսօր, ժամը, տասնմեկին, կեսին, անց, ազատ, տեղ, կտրվածք, ֆեյդ, մորուք, թրաշ, սափրում, գրանցել, պահել, հեռախոսահամար, համարը, անունս, հա, չէ.",
+  "Write Armenian in Armenian script, Russian in Cyrillic, English in Latin. Write numbers as words, exactly as spoken.",
+  "Never add, guess or complete words that were not clearly said.",
+  "Output only the transcript. If there is no clear speech (noise, silence, breathing), output exactly: -",
+].join("\n");
+
+function base64(bytes: Uint8Array): string {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+async function geminiTranscript(env: Env, model: string, body: string, signal: AbortSignal): Promise<string> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+    body,
+    signal,
+  });
+  if (!res.ok) throw new Error(`${model} ${res.status} ${(await res.text()).slice(0, 200)}`);
+  const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+  return (data.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text && !p.thought).map((p) => p.text).join(" ").trim();
+}
+
+async function transcribe(env: Env, req: Request): Promise<Response> {
+  const audio = new Uint8Array(await req.arrayBuffer());
+  if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: STT_PROMPT }, { inline_data: { mime_type: "audio/wav", data: base64(audio) } }] }],
+    generationConfig: { temperature: 0, maxOutputTokens: 200, thinkingConfig: { thinkingLevel: "minimal" } },
+  });
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), STT_TIMEOUT_MS);
+  const attempt = (model: string, delay: number) =>
+    new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => geminiTranscript(env, model, body, abort.signal).then((text) => resolve(`${model}\u0000${text}`), reject), delay);
+      abort.signal.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("aborted")); });
+    });
+  try {
+    const [model, text] = (await Promise.any([attempt(STT_MODELS[0], 0), attempt(STT_MODELS[1], 0)])).split("\u0000");
+    return json({ text: text === "-" ? "" : text, model });
+  } catch (err) {
+    console.error("stt failed", err instanceof AggregateError ? err.errors.map(String) : err);
+    return json({ error: "stt_failed" }, 502);
+  } finally {
+    clearTimeout(timeout);
+    abort.abort(); // cancel the slower request
+  }
+}
+
 // ---------------------------------------------------------------- dashboard
 
 function validSettings(input: Record<string, unknown>, current: Settings): Settings {
@@ -344,6 +408,13 @@ export default {
           hours_text: hoursText,
           today: localNow().date,
         });
+      }
+
+      if (path === "/api/stt" && req.method === "POST") {
+        // Only our own page may spend Gemini credits.
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await transcribe(env, req);
       }
 
       if (path.startsWith("/tools/")) {
