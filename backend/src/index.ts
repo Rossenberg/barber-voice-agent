@@ -258,7 +258,8 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
     });
   try {
     const [model, text] = (await Promise.any([attempt(STT_MODELS[0], 0), attempt(STT_MODELS[1], 0)])).split("\u0000");
-    return json({ text: text === "-" ? "" : text, model });
+    // Noise sometimes comes back as "-" or "-00:00": no letters means no speech.
+    return json({ text: /\p{L}/u.test(text) ? text : "", model });
   } catch (err) {
     console.error("stt failed", err instanceof AggregateError ? err.errors.map(String) : err);
     return json({ error: "stt_failed" }, 502);

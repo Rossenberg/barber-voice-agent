@@ -27,6 +27,7 @@ const T = {
     "label.ended": "Զանգն ավարտվեց։ Կարող եք կրկին զանգել։",
     "label.micBlocked": "Միկրոֆոնն արգելափակված է։ Թույլատրեք այն զննարկչում և կրկին փորձեք։",
     "label.error": "Չհաջողվեց միանալ, փորձեք մի քիչ հետո։",
+    "label.quota": "Դեմո րոպեները վերջացել են։ Փորձեք մի քիչ ուշ։",
     "label.disabled": "Բարբերն անջատել է ասիստենտին վահանակից։",
     "tool.check": ["Նայում է ազատ ժամերը…", "Ժամերը ստուգված են"],
     "tool.book": ["Գրանցում է…", "Գրանցված է ✓"],
@@ -81,6 +82,7 @@ const T = {
     "label.ended": "Звонок завершён. Можно позвонить ещё раз.",
     "label.micBlocked": "Микрофон заблокирован. Разрешите его в браузере и попробуйте снова.",
     "label.error": "Не удалось соединиться, попробуйте чуть позже.",
+    "label.quota": "Демо-минуты закончились. Попробуйте чуть позже.",
     "label.disabled": "Барбер выключил ассистента в панели управления.",
     "tool.check": ["Смотрит свободное время…", "Время проверено"],
     "tool.book": ["Записывает…", "Записано ✓"],
@@ -135,6 +137,7 @@ const T = {
     "label.ended": "Call ended. You can call again.",
     "label.micBlocked": "The microphone is blocked. Allow it in your browser and try again.",
     "label.error": "Couldn’t connect, please try again in a moment.",
+    "label.quota": "Demo minutes have run out. Please try again later.",
     "label.disabled": "The barber has switched the assistant off in the dashboard.",
     "tool.check": ["Checking free times…", "Times checked"],
     "tool.book": ["Booking…", "Booked ✓"],
@@ -405,7 +408,7 @@ async function start() {
       },
       onError: (message) => {
         console.error(message);
-        setLabel("label.error");
+        setLabel(/quota|credits/i.test(String(message)) ? "label.quota" : "label.error");
       },
       onModeChange: ({ mode }) => {
         orb.dataset.mode = mode === "speaking" ? "speaking" : "listening";
@@ -438,7 +441,7 @@ async function start() {
   } catch (err) {
     console.error(err);
     conversation = null;
-    resetUi("label.error");
+    resetUi(/quota|credits/i.test(String(err?.message ?? err)) ? "label.quota" : "label.error");
   } finally {
     connecting = false;
   }
