@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="hy">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Բարբերի վահանակ — BarberVoice</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0d0c0b">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e3a857'/%3E%3Cpath d='M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8' stroke='%231b1206' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;500;600;800&family=Noto+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
+</head>
+<body class="dash">
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#e3a857"/><path d="M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8" stroke="#1b1206" stroke-width="3" stroke-linecap="round"/></svg>
+        <span id="brandName">BarberVoice</span>
+      </a>
+      <div class="langs" id="langs" role="group" aria-label="Language">
+        <button data-lang="hy">ՀԱՅ</button><button data-lang="ru">РУС</button><button data-lang="en">ENG</button>
+      </div>
+      <button class="icon-btn" id="logoutBtn" hidden aria-label="Log out" data-i18n-title="logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- login -->
+  <main class="wrap login" id="loginView" hidden>
+    <form class="card login-card" id="loginForm">
+      <h1 class="dash-title" data-i18n="login.title">Բարբերի վահանակ</h1>
+      <p class="muted" data-i18n="login.sub">Մուտքագրեք գաղտնաբառը</p>
+      <input class="input" id="password" type="password" autocomplete="current-password" required>
+      <p class="error" id="loginError" hidden data-i18n="login.wrong">Սխալ գաղտնաբառ</p>
+      <button class="btn btn-accent" type="submit" data-i18n="login.btn">Մուտք</button>
+    </form>
+  </main>
+
+  <!-- app -->
+  <main class="wrap app" id="appView" hidden>
+    <section class="power card" id="powerCard">
+      <div>
+        <div class="power-title" id="powerTitle"></div>
+        <div class="muted small" id="powerSub"></div>
+      </div>
+      <button class="switch" id="powerSwitch" role="switch" aria-checked="true" aria-label="Assistant on/off"><span></span></button>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="bookings" aria-selected="true" data-i18n="tab.bookings">Գրանցումներ</button>
+      <button role="tab" data-tab="services" aria-selected="false" data-i18n="tab.services">Գներ</button>
+      <button role="tab" data-tab="settings" aria-selected="false" data-i18n="tab.settings">Կարգավորումներ</button>
+    </nav>
+
+    <!-- bookings -->
+    <div class="panel" data-panel="bookings">
+      <button class="btn btn-ghost add-btn" id="addBookingBtn" data-i18n="booking.add">+ Ավելացնել գրանցում</button>
+      <form class="card form" id="bookingForm" hidden>
+        <label class="field"><span data-i18n="f.service">Ծառայություն</span><select class="input" id="bService"></select></label>
+        <div class="row2">
+          <label class="field"><span data-i18n="f.date">Ամսաթիվ</span><input class="input" id="bDate" type="date" required></label>
+          <label class="field"><span data-i18n="f.time">Ժամ</span><input class="input" id="bTime" type="time" step="900" required></label>
+        </div>
+        <label class="field"><span data-i18n="f.name">Անուն</span><input class="input" id="bName" autocomplete="off"></label>
+        <label class="field"><span data-i18n="f.phone">Հեռախոս</span><input class="input" id="bPhone" type="tel" inputmode="tel"></label>
+        <div class="row2">
+          <button class="btn btn-ghost" type="button" id="bCancel" data-i18n="cancel">Չեղարկել</button>
+          <button class="btn btn-accent" type="submit" data-i18n="save">Պահպանել</button>
+        </div>
+      </form>
+      <div id="bookingList"></div>
+    </div>
+
+    <!-- services -->
+    <div class="panel" data-panel="services" hidden>
+      <p class="muted small" data-i18n="services.hint">Ասիստենտը հենց այս գներն է ասում։ Փոփոխությունները գործում են հաջորդ զանգից։</p>
+      <div id="serviceList"></div>
+      <button class="btn btn-ghost add-btn" id="addServiceBtn" data-i18n="services.add">+ Նոր ծառայություն</button>
+      <div class="savebar"><button class="btn btn-accent" id="saveServicesBtn" data-i18n="services.save">Պահպանել գները</button></div>
+    </div>
+
+    <!-- settings -->
+    <div class="panel" data-panel="settings" hidden>
+      <form class="card form" id="settingsForm">
+        <label class="field"><span data-i18n="s.shop">Բարբերշոփի անունը</span><input class="input" id="sShop" maxlength="60" required></label>
+        <label class="field"><span data-i18n="s.address">Հասցե</span><input class="input" id="sAddress" maxlength="120"></label>
+        <label class="field"><span data-i18n="s.greeting">Ողջույնի խոսք</span><textarea class="input" id="sGreeting" maxlength="200" rows="3"></textarea><small data-i18n="s.greetingHint">{shop}՝ բարբերշոփի անունը, {name}՝ ասիստենտի անունը</small></label>
+        <label class="field"><span data-i18n="s.barbers">Քանի՞ բարբեր է աշխատում միաժամանակ</span><input class="input" id="sBarbers" type="number" min="1" max="20" inputmode="numeric" required></label>
+        <fieldset class="hours">
+          <legend data-i18n="s.hours">Աշխատանքային ժամեր</legend>
+          <div id="hoursList"></div>
+        </fieldset>
+        <label class="field"><span data-i18n="s.extra">Լրացուցիչ հրահանգներ ասիստենտին</span><textarea class="input" id="sExtra" maxlength="1500" rows="4" data-i18n-placeholder="s.extraPh"></textarea></label>
+        <button class="btn btn-accent" type="submit" data-i18n="save">Պահպանել</button>
+      </form>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/dashboard/dashboard.js"></script>
+</body>
+</html>

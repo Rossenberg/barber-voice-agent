@@ -1,0 +1,17 @@
+{
+  "name": "barber-voice-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8878",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply barber-voice-agent --local",
+    "db:migrate:remote": "wrangler d1 migrations apply barber-voice-agent --remote",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.151.2"
+  }
+}

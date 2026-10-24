@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "barber-voice-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  // Landing page and dashboard are static files; the Worker only handles these paths.
+  "assets": {
+    "directory": "../web",
+    "run_worker_first": ["/api/*", "/tools/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "barber-voice-agent",
+      "database_id": "05c883b7-a4b3-41ed-b222-a079cc0e07c9"
+    }
+  ]
+}

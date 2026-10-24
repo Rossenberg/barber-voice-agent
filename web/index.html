@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="hy">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BarberVoice — ԻԻ ադմինիստրատոր բարբերշոփի համար</title>
+  <meta name="description" content="Ձայնային ԻԻ ասիստենտ բարբերշոփերի համար․ պատասխանում է զանգերին հայերեն, ռուսերեն և անգլերեն, ասում է գները և գրանցում հաճախորդներին։">
+  <meta name="theme-color" content="#0d0c0b">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e3a857'/%3E%3Cpath d='M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8' stroke='%231b1206' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;500;600;800&family=Noto+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#e3a857"/><path d="M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8" stroke="#1b1206" stroke-width="3" stroke-linecap="round"/></svg>
+        BarberVoice
+      </a>
+      <div class="langs" id="langs" role="group" aria-label="Language">
+        <button data-lang="hy">ՀԱՅ</button><button data-lang="ru">РУС</button><button data-lang="en">ENG</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow"><span class="pill-dot" id="pillDot"></span><span id="pillText" data-i18n="pill.on">Ասիստենտը միացված է</span></span>
+          <h1 data-i18n-html="hero.title">Զանգերին պատասխանում է <em>ԻԻ-ն</em>։ Դուք կտրում եք։</h1>
+          <p class="lead" data-i18n-html="hero.sub"></p>
+        </div>
+
+        <div class="demo" id="assistant">
+          <div class="demo-head">
+            <div class="demo-shop"><span id="shopName">Blade Barbershop</span><small data-i18n="demo.small">Դեմո զանգ բարբերշոփին</small></div>
+            <span class="status" id="status" data-state="idle" data-i18n="status.ready">Պատրաստ է</span>
+          </div>
+
+          <div class="voices" id="voices" role="group" aria-label="Voice">
+            <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b data-i18n="voice.female">Անի</b><span data-i18n="voice.femaleHint">Կանացի ձայն</span></span></button>
+            <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b data-i18n="voice.male">Արամ</b><span data-i18n="voice.maleHint">Տղամարդու ձայն</span></span></button>
+          </div>
+
+          <div class="stage">
+            <div class="orb" id="orb" data-mode="idle">
+              <div class="ring"></div><div class="halo"></div>
+              <div class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 10v4M10.5 7v10M14 9v6M17.5 11v2"/></svg></div>
+            </div>
+          </div>
+          <p class="label" id="label" aria-live="polite"></p>
+
+          <div class="call-row">
+            <button class="btn btn-accent" id="startBtn">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+              <span data-i18n="call.start">Զանգել</span>
+            </button>
+            <button class="btn btn-end" id="endBtn" hidden>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1a1 1 0 0 1-.56.9 11.5 11.5 0 0 0-2.66 1.85 1 1 0 0 1-1.41-.02L.3 13.1a1 1 0 0 1 0-1.41A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.75 11.7 4.69a1 1 0 0 1 0 1.41l-2.47 2.46a1 1 0 0 1-1.41.02 11.3 11.3 0 0 0-2.66-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
+              <span data-i18n="call.end">Ավարտել</span>
+            </button>
+          </div>
+
+          <div class="transcript" id="transcript" aria-live="polite"></div>
+
+          <div class="tries" id="tries">
+            <div class="tries-title" data-i18n="try.title">Փորձեք ասել</div>
+            <div class="chips">
+              <span class="chip">«Ախպեր ջան, էգուց 11-ին տեղ կա՞»</span>
+              <span class="chip">«Թրաշս դզեմ, ինչ արժե՞»</span>
+              <span class="chip">“Can I book a fade tomorrow?”</span>
+            </div>
+          </div>
+
+          <details class="caller" id="callerBox">
+            <summary data-i18n="caller.summary">Զանգողի համարը (դեմո)</summary>
+            <label class="field" style="margin-top:8px">
+              <input class="input" id="callerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+374 91 23 45 67">
+            </label>
+            <p data-i18n="caller.hint">Իրական զանգի ժամանակ համարը որոշվում է ավտոմատ, և ասիստենտը հարցնում է՝ պահե՞լ այն։</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap stats">
+      <div class="stat"><b>24/7</b><span data-i18n="stat.always">առանց հանգստյան</span></div>
+      <div class="stat"><b>3</b><span data-i18n="stat.langs">լեզու՝ ՀԱՅ, РУС, ENG</span></div>
+      <div class="stat"><b>0</b><span data-i18n="stat.missed">բաց թողնված զանգ</span></div>
+    </div>
+
+    <section id="how">
+      <div class="wrap">
+        <h2 class="sec-title" data-i18n="how.title">Ինչպես է աշխատում</h2>
+        <p class="sec-sub" data-i18n="how.sub">Ամբողջ զանգը տևում է կես րոպե։</p>
+        <div class="steps">
+          <article class="card step">
+            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path class="handset" d="M8 6.5c1 0 1.6.6 2.2 2l1 2.4c.4 1 .1 1.8-.6 2.4l-1 .8c.9 2.3 2.8 4.3 5.2 5.3l.8-1c.6-.7 1.5-1 2.4-.6l2.4 1c1.4.6 2 1.2 2 2.2 0 2.4-2 4.5-4.6 4.5C10.6 25.5 6.5 19.6 6.5 11c0-2.5 0-4.5 1.5-4.5z" fill="#e3a857"/>
+              <path class="wave" d="M19 9a6 6 0 0 1 4 4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
+              <path class="wave w2" d="M19.5 4.5a10.5 10.5 0 0 1 8 8" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
+            </svg></div>
+            <h3 data-i18n="how.1.t">Հաճախորդը զանգում է</h3>
+            <p data-i18n="how.1.d">Ձեր սովորական համարին։ Եթե զբաղված եք, պատասխանում է ասիստենտը։</p>
+          </article>
+          <article class="card step">
+            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect x="5" y="7" width="22" height="20" rx="4" stroke="#f4efe7" stroke-width="2"/>
+              <path d="M5 13h22M11 4.5v4M21 4.5v4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
+              <rect class="cell" x="16.5" y="16" width="7" height="7" rx="2"/>
+              <path class="tick" d="M17.8 19.6l1.6 1.6 3-3.2" stroke="#e3a857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg></div>
+            <h3 data-i18n="how.2.t">Ասիստենտը ստուգում է օրացույցը</h3>
+            <p data-i18n="how.2.d">Ասում է ազատ ժամը, գինը և գրանցում մի քանի վայրկյանում։</p>
+          </article>
+          <article class="card step">
+            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect x="9" y="3.5" width="14" height="25" rx="3.5" stroke="#f4efe7" stroke-width="2"/>
+              <rect class="cell" x="12" y="9" width="8" height="4" rx="1.5"/>
+              <rect class="cell" x="12" y="15" width="8" height="4" rx="1.5" style="animation-delay:.4s"/>
+              <path d="M14 24.5h4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
+            </svg></div>
+            <h3 data-i18n="how.3.t">Դուք տեսնում եք գրանցումը</h3>
+            <p data-i18n="how.3.d">Վահանակում, Altegio-ում կամ Google Օրացույցում։</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2 class="sec-title" data-i18n="feat.title">Խոսում է ինչպես ձեր ադմինիստրատորը</h2>
+        <p class="sec-sub" data-i18n="feat.sub">Միայն ավելի արագ ու առանց բաց թողնված զանգերի։</p>
+        <div class="features">
+          <article class="card">
+            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <path d="M5 8a4 4 0 0 1 4-4h14a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4h-8l-6 5v-5H9a4 4 0 0 1-4-4z" fill="#e3a857"/>
+              <text class="bub-a" x="16" y="16.5" text-anchor="middle" font-size="10" font-weight="800" fill="#1b1206" font-family="Noto Sans Armenian, sans-serif">Ա</text>
+              <text class="bub-b" x="16" y="16.5" text-anchor="middle" font-size="10" font-weight="800" fill="#1b1206" font-family="Noto Sans, sans-serif">A</text>
+            </svg></div>
+            <h3 data-i18n="feat.slang.t">Հասկանում է խոսակցական հայերենը</h3>
+            <p data-i18n="feat.slang.d">Ժարգոն, ռուսերեն բառեր, «ախպեր ջան»՝ ամեն ինչ հասկանում է։</p>
+            <div class="slang"><span>թրաշս դզեմ</span><span>էգուց 11-ին կարամ գամ</span><span>ֆեյդով</span><span>մաշինկայով</span></div>
+          </article>
+          <article class="card">
+            <div class="ico"><svg viewBox="0 0 32 32" aria-hidden="true">
+              <g fill="#e3a857"><rect class="bar" x="6" y="10" width="3.5" height="12" rx="1.75"/><rect class="bar" x="11.5" y="6" width="3.5" height="20" rx="1.75"/><rect class="bar" x="17" y="9" width="3.5" height="14" rx="1.75"/><rect class="bar" x="22.5" y="12" width="3.5" height="8" rx="1.75"/></g>
+            </svg></div>
+            <h3 data-i18n="feat.short.t">Խոսում է կարճ ու արագ</h3>
+            <p data-i18n="feat.short.d">Առանց երկար բացատրությունների՝ «Հա, ազատ է։ Գրանցե՞մ»։</p>
+          </article>
+          <article class="card">
+            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect x="4" y="9" width="24" height="14" rx="4" stroke="#f4efe7" stroke-width="2"/>
+              <circle class="digit" cx="10" cy="16" r="1.8" fill="#e3a857"/><circle class="digit d2" cx="16" cy="16" r="1.8" fill="#e3a857"/><circle class="digit d3" cx="22" cy="16" r="1.8" fill="#e3a857"/>
+            </svg></div>
+            <h3 data-i18n="feat.phone.t">Պահում է զանգողի համարը</h3>
+            <p data-i18n="feat.phone.d">Հարցնում է՝ պահե՞լ համարը, և գրանցումը պատրաստ է։</p>
+          </article>
+          <article class="card">
+            <div class="ico"><svg viewBox="0 0 32 32" aria-hidden="true">
+              <rect class="track" x="4" y="10" width="24" height="12" rx="6" stroke="#f4efe7" stroke-width="2"/>
+              <circle class="knob" cx="10" cy="16" r="4" fill="#e3a857"/>
+            </svg></div>
+            <h3 data-i18n="feat.control.t">Ամբողջական կառավարում</h3>
+            <p data-i18n="feat.control.d">Միացնել և անջատել, փոխել գները, ծառայություններն ու ժամերը՝ հեռախոսից։</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="integrations">
+      <div class="wrap">
+        <h2 class="sec-title" data-i18n="int.title">Ինտեգրացիաներ</h2>
+        <p class="sec-sub" data-i18n="int.sub">Գրանցումները գնում են այնտեղ, որտեղ արդեն աշխատում եք։</p>
+        <div class="integrations">
+          <div class="int"><span class="logo" style="background:#1f2a1f;color:#7fdc8a">al</span><span><b>Altegio</b><span data-i18n="int.altegio">Օնլայն գրանցում և CRM</span></span></div>
+          <div class="int"><span class="logo" style="background:#1d2536;color:#8fb3ff">31</span><span><b>Google Calendar</b><span data-i18n="int.gcal">Գրանցումները՝ ձեր օրացույցում</span></span></div>
+          <div class="int"><span class="logo" style="background:#2c2117;color:#e3a857">CRM</span><span><b data-i18n="int.crm">CRM համակարգեր</b><span>Bitrix24, amoCRM</span></span></div>
+          <div class="int"><span class="logo" style="background:#2a1b1b;color:#ff9b8f">☎</span><span><b data-i18n="int.phone">Հայկական համարներ</b><span>Ucom, Viva, Team</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="prices">
+      <div class="wrap">
+        <h2 class="sec-title" data-i18n="prices.title">Դեմո բարբերշոփի գները</h2>
+        <p class="sec-sub" data-i18n="prices.sub">Ասիստենտը գները վերցնում է վահանակից։ Փոխեք այնտեղ, և հաջորդ զանգին արդեն նոր գինը կասի։</p>
+        <div class="prices" id="priceList"></div>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap">
+        <h2 class="sec-title" data-i18n="cta.title">Ուզու՞մ եք նույնը ձեր բարբերշոփի համար</h2>
+        <p class="sec-sub" data-i18n="cta.sub">Միացնում ենք ձեր համարին և օրացույցին մեկ օրում։</p>
+        <div class="final-actions">
+          <button class="btn btn-accent" data-start><span data-i18n="call.demo">Զանգել դեմոյին</span></button>
+          <a class="btn btn-ghost" href="/dashboard/" data-i18n="cta.dashboard">Բացել վահանակը</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© 2026 BarberVoice · WeBoost</span>
+      <a class="link-btn" href="/dashboard/" data-i18n="nav.dashboard">Բարբերի վահանակ</a>
+    </div>
+  </footer>
+
+  <div class="fab" id="fab"><button class="btn btn-accent" data-start><span data-i18n="call.demo">Զանգել դեմոյին</span></button></div>
+
+  <script src="/config.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

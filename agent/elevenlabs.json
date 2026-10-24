@@ -1,0 +1,8 @@
+{
+  "tool_secret_id": "klxQKB537DAAVyatzj2q",
+  "tools": {
+    "check_availability": "tool_1901m5qrkehwer9s8rsw7tqnfx4m",
+    "create_booking": "tool_7901m5qrkfqxfzcr4jpv1mm7dy14"
+  },
+  "agent_id": "agent_5701m5qrkgxkf4gr69bn3xb6wrv0"
+}
