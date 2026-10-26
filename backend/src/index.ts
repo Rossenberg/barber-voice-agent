@@ -24,6 +24,7 @@ interface Env {
   ELEVENLABS_API_KEY: string; // fallback speech-to-text (Scribe) when Gemini stalls
   AZURE_SPEECH_KEY: string; // candidate speech-to-text with native hy-AM (compared on /lab/)
   AZURE_SPEECH_REGION: string;
+  OPENAI_API_KEY: string; // candidate speech-to-text and the Realtime (speech-to-speech) test page
 }
 
 interface Settings {
@@ -282,6 +283,16 @@ async function azureTranscript(env: Env, audio: Uint8Array, signal: AbortSignal)
   return (((await res.json()) as { DisplayText?: string }).DisplayText ?? "").trim();
 }
 
+async function openaiTranscript(env: Env, model: string, audio: Uint8Array, signal: AbortSignal): Promise<string> {
+  const form = new FormData();
+  form.append("model", model);
+  form.append("language", "hy");
+  form.append("file", new Blob([audio], { type: "audio/wav" }), "phrase.wav");
+  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: form, signal });
+  if (!res.ok) throw new Error(`openai ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return (((await res.json()) as { text?: string }).text ?? "").trim();
+}
+
 /** /lab/: the same phrase through every recognizer, each with its own timing, to pick one on real voices. */
 async function compareTranscripts(env: Env, req: Request): Promise<Response> {
   const audio = new Uint8Array(await req.arrayBuffer());
@@ -299,8 +310,9 @@ async function compareTranscripts(env: Env, req: Request): Promise<Response> {
   };
   const results = await Promise.all([
     run("Azure (hy-AM)", () => azureTranscript(env, audio, abort.signal)),
-    run("Gemini 3.5 Flash", () => geminiTranscript(env, "gemini-3.5-flash", audioB64, abort.signal)),
     run("Gemini 3.5 Flash-Lite", () => geminiTranscript(env, "gemini-3.5-flash-lite", audioB64, abort.signal)),
+    run("OpenAI gpt-transcribe", () => openaiTranscript(env, "gpt-transcribe", audio, abort.signal)),
+    run("OpenAI gpt-4o-transcribe", () => openaiTranscript(env, "gpt-4o-transcribe", audio, abort.signal)),
     run("ElevenLabs Scribe", () => scribeTranscript(env, audio, abort.signal)),
   ]);
   clearTimeout(timeout);
@@ -328,6 +340,41 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
     clearTimeout(timeout);
     abort.abort(); // cancel the slower request
   }
+}
+
+// ---------------------------------------------------------------- OpenAI Realtime test (/realtime/)
+
+/** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
+async function realtimeSession(env: Env, req: Request): Promise<Response> {
+  const voice = new URL(req.url).searchParams.get("voice") === "male" ? "cedar" : "marin";
+  const settings = await getSettings(env.DB);
+  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
+  const instructions = [
+    `You are the phone assistant of ${settings.shop_name}, a barbershop in Yerevan. Speak natural, colloquial Eastern Armenian like a friendly Yerevan barbershop administrator; switch to Russian or English only if the caller does.`,
+    "Be very brief: one short sentence per reply, usually 3-10 words. Understand slang: «թրաշս դզեմ» = beard trim, «էգուց» = tomorrow, «կարամ գամ» = can I come, «ֆեյդ», «մաշինկայով» = buzz cut.",
+    "This is a voice test without the calendar: treat any requested time during opening hours as free, ask the name, then confirm the booking in one sentence.",
+    `Today: ${localNow().date}. Opening hours: ${hoursText}.`,
+    `Prices (id | Armenian | English | duration | price):\n${servicesText}`,
+    "Say prices in words, e.g. «տաս հազար դրամ».",
+  ].join("\n");
+  const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      session: {
+        type: "realtime",
+        model: "gpt-realtime-2.1",
+        instructions,
+        audio: {
+          input: { transcription: { model: "gpt-transcribe", language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high" } },
+          output: { voice },
+        },
+      },
+    }),
+  });
+  const data = (await res.json()) as { value?: string; error?: { message?: string } };
+  if (!res.ok || !data.value) return json({ error: data.error?.message ?? `openai ${res.status}` }, 502);
+  return json({ key: data.value, model: "gpt-realtime-2.1" });
 }
 
 // ---------------------------------------------------------------- dashboard
@@ -477,6 +524,11 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await transcribe(env, req);
+      }
+      if (path === "/api/realtime-session" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await realtimeSession(env, req);
       }
       if (path === "/api/stt-compare" && req.method === "POST") {
         const origin = req.headers.get("origin");
