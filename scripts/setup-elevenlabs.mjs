@@ -136,6 +136,10 @@ async function ensureTools() {
       name: tool.name,
       description: tool.description,
       response_timeout_secs: 15,
+      // say "one moment, let me check" first, with a soft typing sound, instead of silence while the
+      // LLM decides, the tool runs and the LLM answers again (that silence was ~5 s on a real call)
+      pre_tool_speech: "force",
+      tool_call_sound: "typing",
       api_schema: {
         url: `${BACKEND_URL}${tool.path}`,
         method: "POST",

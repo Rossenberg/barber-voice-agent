@@ -1,21 +1,12 @@
-// Our own "ears": captures the mic, detects when the caller starts and stops talking (energy VAD),
-// and hands over each finished phrase as a 16 kHz mono WAV. Used instead of ElevenLabs' realtime
-// recognition, which is weak on spoken Armenian.
+// Our own "ears": Silero VAD (a small neural network running in the browser) decides when the caller
+// starts and stops talking, and each finished phrase is handed over as a 16 kHz mono WAV for Gemini.
+// A plain loudness detector failed on phones: auto-gain lifts background noise, so phrases never
+// "ended" and arrived 10–20 s late. Needs the onnxruntime-web and vad-web scripts (window.vad).
 
+const VAD_ASSETS = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/";
+const ORT_ASSETS = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
 const RATE = 16000;
-const FRAME = 320; // 20 ms at 16 kHz
-const START_FRAMES = 3; // 60 ms of voice starts a phrase
-const EARLY_FRAMES = 10; // after 200 ms of silence, start transcribing in advance
-const END_FRAMES = 15; // 300 ms of silence ends the phrase
-const PRE_ROLL = 15; // keep 300 ms before the start so the first syllable isn't cut
-const MIN_VOICE_FRAMES = 12; // ignore clicks shorter than 240 ms of voice
-const MAX_FRAMES = 15 * 50; // force-end after 15 s
-
-const WORKLET = `
-class Tap extends AudioWorkletProcessor {
-  process(inputs) { const ch = inputs[0][0]; if (ch) this.port.postMessage(ch.slice(0)); return true; }
-}
-registerProcessor("tap", Tap);`;
+const DEBUG = new URLSearchParams(location.search).has("debug"); // ?debug logs what the VAD hears
 
 function toWav(samples) {
   const buf = new ArrayBuffer(44 + samples.length * 2);
@@ -30,105 +21,58 @@ function toWav(samples) {
 }
 
 /**
- * onEarly fires after a short pause with the audio so far, so transcription can start before the phrase is
- * certainly over; onPhrase then confirms it (same audio if the caller stayed silent), and onResume says the
- * caller kept talking and the early audio should be dropped.
- * @param {{ onStart?: () => void, onEarly?: (wav: Blob) => void, onResume?: () => void, onPhrase: (wav: Blob, sameAsEarly: boolean) => void, isPaused: () => boolean }} handlers
+ * @param {{ onStart?: () => void, onPhrase: (wav: Blob) => void, isPaused: () => boolean }} handlers
+ * Phrases that start while isPaused() is true (the assistant is talking) are dropped, so its own
+ * voice leaking into the mic is never sent as the caller's words.
  */
-export async function createListener({ onStart, onEarly, onResume, onPhrase, isPaused }) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  const ctx = new AudioContext();
-  await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
-  const source = ctx.createMediaStreamSource(stream);
-  const tap = new AudioWorkletNode(ctx, "tap");
-  const mute = ctx.createGain();
-  mute.gain.value = 0;
-  source.connect(tap).connect(mute).connect(ctx.destination);
-  if (ctx.state === "suspended") await ctx.resume(); // iOS Safari starts audio contexts suspended
-
-  const ratio = ctx.sampleRate / RATE;
-  let carry = new Float32Array(0); // resampled samples waiting to fill a frame
-  let pos = 0; // fractional read position for resampling
-  let floor = 0.004; // adaptive background-noise level
-  let speaking = false, voiceRun = 0, silenceRun = 0, voiceFrames = 0, earlySent = false;
-  let pre = [], phrase = [];
+export async function createListener({ onStart, onPhrase, isPaused }) {
+  if (!window.vad?.MicVAD) throw new Error("vad-web is not loaded");
   const state = { level: 0 };
+  let startedWhilePaused = false;
+  let maxProb = 0, maxLevel = 0, lastLog = Date.now();
 
-  function reset() {
-    speaking = false; voiceRun = 0; silenceRun = 0; voiceFrames = 0; phrase = []; pre = []; earlySent = false;
-  }
-
-  function onFrame(frame) {
-    let sum = 0;
-    for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
-    const rms = Math.sqrt(sum / frame.length);
-    state.level = Math.min(1, rms * 12);
-    if (isPaused()) { if (speaking || pre.length) reset(); return; }
-
-    const threshold = Math.max(0.012, floor * 3.5);
-    const voiced = rms > threshold;
-    if (!speaking) {
-      floor = voiced ? floor : floor * 0.95 + rms * 0.05;
-      pre.push(frame);
-      if (pre.length > PRE_ROLL) pre.shift();
-      voiceRun = voiced ? voiceRun + 1 : 0;
-      if (voiceRun >= START_FRAMES) {
-        speaking = true; phrase = [...pre]; pre = []; silenceRun = 0; voiceFrames = voiceRun;
-        onStart?.();
+  const mic = await window.vad.MicVAD.new({
+    model: "v5",
+    baseAssetPath: VAD_ASSETS,
+    onnxWASMBasePath: ORT_ASSETS,
+    startOnLoad: false,
+    getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
+    positiveSpeechThreshold: 0.5,
+    negativeSpeechThreshold: 0.35,
+    redemptionMs: 400, // this much non-speech ends the phrase
+    preSpeechPadMs: 300, // keep the first syllable
+    minSpeechMs: 250, // ignore clicks and coughs
+    onFrameProcessed: (probs, frame) => {
+      let sum = 0;
+      for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+      state.level = Math.min(1, Math.sqrt(sum / frame.length) * 12);
+      if (DEBUG) {
+        maxProb = Math.max(maxProb, probs.isSpeech);
+        maxLevel = Math.max(maxLevel, state.level);
+        if (Date.now() - lastLog > 1000) {
+          console.log(`VAD level ${maxLevel.toFixed(2)} speech ${maxProb.toFixed(2)} paused ${isPaused()}`);
+          maxProb = 0; maxLevel = 0; lastLog = Date.now();
+        }
       }
-      return;
-    }
-    phrase.push(frame);
-    if (voiced) {
-      voiceFrames++;
-      silenceRun = 0;
-      if (earlySent) { earlySent = false; onResume?.(); }
-    } else silenceRun++;
-    const enough = voiceFrames >= MIN_VOICE_FRAMES;
-    // The audio up to the start of this pause (plus 100 ms), identical for the early and the final call.
-    const audio = () => {
-      const frames = phrase.slice(0, phrase.length - silenceRun + 5);
-      const all = new Float32Array(frames.length * FRAME);
-      frames.forEach((f, i) => all.set(f, i * FRAME));
-      return toWav(all);
-    };
-    if (silenceRun === EARLY_FRAMES && enough && onEarly) {
-      earlySent = true;
-      onEarly(audio());
-    }
-    if (silenceRun >= END_FRAMES || phrase.length >= MAX_FRAMES) {
-      const wav = enough ? audio() : null;
-      const sameAsEarly = earlySent && silenceRun >= END_FRAMES;
-      reset();
-      if (wav) onPhrase(wav, sameAsEarly);
-    }
-  }
-
-  tap.port.onmessage = ({ data }) => {
-    // Downsample to 16 kHz by averaging (input is usually 44.1 or 48 kHz).
-    const out = [];
-    while (pos + ratio <= data.length) {
-      let s = 0, n = 0;
-      for (let i = Math.floor(pos); i < Math.floor(pos + ratio); i++) { s += data[i]; n++; }
-      out.push(n ? s / n : 0);
-      pos += ratio;
-    }
-    pos -= data.length;
-    if (pos < 0) pos = 0;
-    const merged = new Float32Array(carry.length + out.length);
-    merged.set(carry);
-    merged.set(out, carry.length);
-    let i = 0;
-    for (; i + FRAME <= merged.length; i += FRAME) onFrame(merged.slice(i, i + FRAME));
-    carry = merged.slice(i);
-  };
+    },
+    onSpeechStart: () => {
+      startedWhilePaused = isPaused();
+      if (DEBUG) console.log("VAD speech start", startedWhilePaused ? "(dropped: assistant talking)" : "");
+      if (!startedWhilePaused) onStart?.();
+    },
+    onVADMisfire: () => DEBUG && console.log("VAD misfire (too short)"),
+    onSpeechEnd: (audio) => {
+      if (DEBUG) console.log(`VAD speech end ${(audio.length / RATE).toFixed(1)}s`);
+      if (startedWhilePaused || isPaused()) return;
+      onPhrase(toWav(audio));
+    },
+  });
+  await mic.start();
 
   return {
     state,
     async stop() {
-      tap.port.onmessage = null;
-      stream.getTracks().forEach((t) => t.stop());
-      await ctx.close().catch(() => {});
+      await mic.destroy();
     },
   };
 }

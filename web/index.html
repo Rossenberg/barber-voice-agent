@@ -215,6 +215,11 @@
   <div class="fab" id="fab"><button class="btn btn-accent" data-start><span data-i18n="call.demo">Զանգել դեմոյին</span></button></div>
 
   <script src="/config.js"></script>
+  <!-- Silero VAD (speech start/end detection in the browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
+  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort-wasm-simd-threaded.wasm" crossorigin>
+  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/silero_vad_v5.onnx" crossorigin>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

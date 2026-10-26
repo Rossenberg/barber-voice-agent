@@ -302,14 +302,13 @@ function animateOrb() {
   rafId = requestAnimationFrame(animateOrb);
 }
 
-/** Starts a Gemini transcription of a phrase; abortable in case the caller keeps talking. */
+/** Starts a Gemini transcription of a phrase. */
 function requestTranscript(wav) {
-  const ctrl = new AbortController();
-  const text = fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav, signal: ctrl.signal })
+  const text = fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav })
     .then((res) => res.json())
     .then((data) => data.text || "")
-    .catch((err) => (err.name === "AbortError" ? "" : (console.error(err), "")));
-  return { text, abort: () => ctrl.abort() };
+    .catch((err) => (console.error(err), ""));
+  return { text };
 }
 
 /** Shows the caller's words and hands them to the agent (phrases stay in order). */
@@ -324,17 +323,12 @@ async function deliver(request) {
 }
 
 async function startListening() {
-  let early = null; // transcription started during the short pause before the phrase is confirmed over
   try {
     conversation.setMicMuted(true); // the agent gets our transcripts instead of its own recognition
     listener = await createListener({
       onStart: () => conversation?.sendUserActivity(),
-      onEarly: (wav) => (early = requestTranscript(wav)),
-      onResume: () => { early?.abort(); early = null; },
-      onPhrase: (wav, sameAsEarly) => {
-        const request = sameAsEarly && early ? early : requestTranscript(wav);
-        if (early && early !== request) early.abort();
-        early = null;
+      onPhrase: (wav) => {
+        const request = requestTranscript(wav);
         sttChain = sttChain.then(() => deliver(request));
       },
       isPaused: () => agentSpeaking || Date.now() < resumeAt,
