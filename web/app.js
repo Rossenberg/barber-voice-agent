@@ -24,6 +24,7 @@ const T = {
     "label.speaking": "Խոսում է…",
     "label.listening": "Լսում է…",
     "label.hearing": "Հասկանում է…",
+    "label.notHeard": "Չլսեցի, խնդրում եմ կրկնեք",
     "label.ended": "Զանգն ավարտվեց։ Կարող եք կրկին զանգել։",
     "label.micBlocked": "Միկրոֆոնն արգելափակված է։ Թույլատրեք այն զննարկչում և կրկին փորձեք։",
     "label.error": "Չհաջողվեց միանալ, փորձեք մի քիչ հետո։",
@@ -79,6 +80,7 @@ const T = {
     "label.speaking": "Говорит…",
     "label.listening": "Слушает…",
     "label.hearing": "Распознаёт…",
+    "label.notHeard": "Не расслышал, повторите, пожалуйста",
     "label.ended": "Звонок завершён. Можно позвонить ещё раз.",
     "label.micBlocked": "Микрофон заблокирован. Разрешите его в браузере и попробуйте снова.",
     "label.error": "Не удалось соединиться, попробуйте чуть позже.",
@@ -134,6 +136,7 @@ const T = {
     "label.speaking": "Speaking…",
     "label.listening": "Listening…",
     "label.hearing": "Understanding…",
+    "label.notHeard": "Didn’t catch that, please repeat",
     "label.ended": "Call ended. You can call again.",
     "label.micBlocked": "The microphone is blocked. Allow it in your browser and try again.",
     "label.error": "Couldn’t connect, please try again in a moment.",
@@ -316,7 +319,11 @@ async function deliver(request) {
   const bubble = addMessage("…", "user pending");
   setLabel("label.hearing");
   const text = await request.text;
-  if (!text || !conversation) return bubble.remove();
+  if (!text || !conversation) {
+    bubble.remove();
+    if (conversation) setLabel("label.notHeard");
+    return;
+  }
   bubble.textContent = text;
   bubble.classList.remove("pending");
   conversation.sendUserMessage(text);

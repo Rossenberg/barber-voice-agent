@@ -21,6 +21,7 @@ interface Env {
   ADMIN_PASSWORD: string; // dashboard login
   SESSION_SECRET: string; // signs dashboard session tokens
   GEMINI_API_KEY: string; // speech-to-text (ElevenLabs' realtime recognition is weak on spoken Armenian)
+  ELEVENLABS_API_KEY: string; // fallback speech-to-text (Scribe) when Gemini stalls
 }
 
 interface Settings {
@@ -207,10 +208,12 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
 
 // ---------------------------------------------------------------- speech-to-text
 
-// Flash-Lite and Flash both got real calls right; Gemini's response time swings between 1.5 and 5 s,
-// so we ask both at once and take whichever answers first (each costs a fraction of a cent).
+// Flash-Lite and Flash both got real calls right; Gemini's response time swings between 1.5 and 5 s
+// (and on the free tier it sometimes doesn't answer at all), so we ask both at once, add ElevenLabs
+// Scribe after SCRIBE_DELAY_MS as a safety net, and take whichever answers first.
 const STT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash"];
-const STT_TIMEOUT_MS = 9000;
+const STT_TIMEOUT_MS = 8000;
+const SCRIBE_DELAY_MS = 2500;
 const MAX_AUDIO_BYTES = 1_000_000; // ~30 s of 16 kHz mono WAV
 
 // Deliberately no hints about what the assistant just asked: in testing that made the model invent
@@ -242,6 +245,16 @@ async function geminiTranscript(env: Env, model: string, body: string, signal: A
   return (data.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text && !p.thought).map((p) => p.text).join(" ").trim();
 }
 
+async function scribeTranscript(env: Env, audio: Uint8Array, signal: AbortSignal): Promise<string> {
+  const form = new FormData();
+  form.append("model_id", "scribe_v2");
+  form.append("language_code", "hy");
+  form.append("file", new Blob([audio], { type: "audio/wav" }), "phrase.wav");
+  const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", { method: "POST", headers: { "xi-api-key": env.ELEVENLABS_API_KEY }, body: form, signal });
+  if (!res.ok) throw new Error(`scribe ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return (((await res.json()) as { text?: string }).text ?? "").trim();
+}
+
 async function transcribe(env: Env, req: Request): Promise<Response> {
   const audio = new Uint8Array(await req.arrayBuffer());
   if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
@@ -251,13 +264,18 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
   });
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), STT_TIMEOUT_MS);
-  const attempt = (model: string, delay: number) =>
+  const attempt = (name: string, delay: number, run: () => Promise<string>) =>
     new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => geminiTranscript(env, model, body, abort.signal).then((text) => resolve(`${model}\u0000${text}`), reject), delay);
+      const timer = setTimeout(() => run().then((text) => resolve(`${name}\u0000${text}`), reject), delay);
       abort.signal.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("aborted")); });
     });
   try {
-    const [model, text] = (await Promise.any([attempt(STT_MODELS[0], 0), attempt(STT_MODELS[1], 0)])).split("\u0000");
+    const [model, text] = (
+      await Promise.any([
+        ...STT_MODELS.map((m) => attempt(m, 0, () => geminiTranscript(env, m, body, abort.signal))),
+        attempt("scribe_v2", SCRIBE_DELAY_MS, () => scribeTranscript(env, audio, abort.signal)),
+      ])
+    ).split("\u0000");
     // Noise sometimes comes back as "-" or "-00:00": no letters means no speech.
     return json({ text: /\p{L}/u.test(text) ? text : "", model });
   } catch (err) {
