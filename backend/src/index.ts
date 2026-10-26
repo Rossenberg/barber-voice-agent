@@ -210,12 +210,13 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
 
 // ---------------------------------------------------------------- speech-to-text
 
-// Flash-Lite and Flash both got real calls right; Gemini's response time swings between 1.5 and 5 s
-// (and on the free tier it sometimes doesn't answer at all), so we ask both at once, add ElevenLabs
-// Scribe after SCRIBE_DELAY_MS as a safety net, and take whichever answers first.
-const STT_MODELS = ["gemini-3.5-flash-lite", "gemini-3.5-flash"];
+// Picked on the user's live voice at /lab/ (14 phrases): Gemini 3.5 Flash-Lite was the most accurate on
+// spoken Armenian and barbershop slang (1.3–1.5 s); Azure hy-AM was fastest (0.5–1 s) but garbled slang
+// like «թրաշ դզել». Both start at once; Gemini's text wins if it arrives within GEMINI_WAIT_MS,
+// otherwise Azure's. (Gemini Flash only allows 5 requests/min on this key; Scribe was weakest.)
+const STT_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_WAIT_MS = 2000;
 const STT_TIMEOUT_MS = 8000;
-const SCRIBE_DELAY_MS = 2500;
 const MAX_AUDIO_BYTES = 1_000_000; // ~30 s of 16 kHz mono WAV
 
 // Deliberately no hints about what the assistant just asked: in testing that made the model invent
@@ -309,23 +310,17 @@ async function compareTranscripts(env: Env, req: Request): Promise<Response> {
 async function transcribe(env: Env, req: Request): Promise<Response> {
   const audio = new Uint8Array(await req.arrayBuffer());
   if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
-  const audioB64 = base64(audio);
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), STT_TIMEOUT_MS);
-  const attempt = (name: string, delay: number, run: () => Promise<string>) =>
-    new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => run().then((text) => resolve(`${name}\u0000${text}`), reject), delay);
-      abort.signal.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("aborted")); });
-    });
+  const tag = (name: string, p: Promise<string>) => p.then((text) => ({ name, text }));
+  const gemini = tag(STT_MODEL, geminiTranscript(env, STT_MODEL, base64(audio), abort.signal));
+  const azure = tag("azure", azureTranscript(env, audio, abort.signal));
+  for (const p of [gemini, azure]) p.catch(() => {}); // the loser's abort isn't an error
   try {
-    const [model, text] = (
-      await Promise.any([
-        ...STT_MODELS.map((m) => attempt(m, 0, () => geminiTranscript(env, m, audioB64, abort.signal))),
-        attempt("scribe_v2", SCRIBE_DELAY_MS, () => scribeTranscript(env, audio, abort.signal)),
-      ])
-    ).split("\u0000");
+    const early = await Promise.race([gemini, new Promise<null>((r) => setTimeout(() => r(null), GEMINI_WAIT_MS))]).catch(() => null);
+    const { name, text } = early ?? (await Promise.any([gemini, azure]));
     // Noise sometimes comes back as "-" or "-00:00": no letters means no speech.
-    return json({ text: /\p{L}/u.test(text) ? text : "", model });
+    return json({ text: /\p{L}/u.test(text) ? text : "", model: name });
   } catch (err) {
     console.error("stt failed", err instanceof AggregateError ? err.errors.map(String) : err);
     return json({ error: "stt_failed" }, 502);
