@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Тест распознавания — BarberVoice</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0d0c0b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;800&family=Noto+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    main { padding: 20px 0 60px; display: grid; gap: 16px; }
+    h1 { font-size: 26px; margin: 0; }
+    .muted { color: var(--muted); font-size: 14px; margin: 0; }
+    #toggle { width: 100%; }
+    #state { text-align: center; color: var(--muted); font-size: 14px; min-height: 20px; }
+    .phrase { display: grid; gap: 8px; padding: 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+    .phrase h2 { font-size: 13px; color: var(--muted); margin: 0; font-weight: 600; }
+    .res { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+    .res b { font-size: 13px; }
+    .res .ms { font-size: 12px; color: var(--muted); text-align: right; }
+    .res .tx { grid-column: 1 / -1; font-size: 16px; line-height: 1.4; }
+    .res .tx.err { color: var(--danger); font-size: 13px; }
+    .res.fast { border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Тест распознавания</h1>
+    <p class="muted">Нажми «Начать» и говори по-армянски обычными фразами, с паузами между ними. Каждая фраза уйдёт сразу в 4 распознавателя, и рядом будет видно, что услышал каждый и за сколько секунд.</p>
+    <button class="btn btn-accent" id="toggle">Начать</button>
+    <div id="state"></div>
+    <div id="list"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
+  <script type="module">
+    import { createListener } from "/listener.js";
+
+    const $ = (id) => document.getElementById(id);
+    let listener = null, n = 0;
+
+    async function compare(wav) {
+      const idx = ++n;
+      const box = document.createElement("div");
+      box.className = "phrase";
+      box.innerHTML = `<h2>Фраза ${idx} · ${(wav.size / 32000).toFixed(1)} с · распознаём…</h2>`;
+      $("list").prepend(box);
+      try {
+        const res = await fetch("/api/stt-compare", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+        const { results } = await res.json();
+        box.querySelector("h2").textContent = `Фраза ${idx} · ${(wav.size / 32000).toFixed(1)} с`;
+        const fastest = Math.min(...results.filter((r) => r.text).map((r) => r.ms));
+        for (const r of results) {
+          const row = document.createElement("div");
+          row.className = `res${r.text && r.ms === fastest ? " fast" : ""}`;
+          row.innerHTML = `<b></b><span class="ms"></span><span class="tx"></span>`;
+          row.querySelector("b").textContent = r.name;
+          row.querySelector(".ms").textContent = `${(r.ms / 1000).toFixed(1)} с`;
+          const tx = row.querySelector(".tx");
+          tx.textContent = r.text ?? `ошибка: ${r.error}`;
+          if (!r.text) tx.classList.add("err");
+          box.append(row);
+        }
+      } catch (err) {
+        box.querySelector("h2").textContent = `Фраза ${idx} · ошибка сети`;
+      }
+    }
+
+    $("toggle").addEventListener("click", async () => {
+      if (listener) {
+        await listener.stop();
+        listener = null;
+        $("toggle").textContent = "Начать";
+        $("state").textContent = "";
+        return;
+      }
+      $("state").textContent = "Загружаем детектор речи…";
+      try {
+        listener = await createListener({ onStart: () => ($("state").textContent = "Слышу речь…"), onPhrase: (wav) => { $("state").textContent = "Слушаю"; compare(wav); }, isPaused: () => false });
+        $("toggle").textContent = "Остановить";
+        $("state").textContent = "Слушаю — говори";
+      } catch (err) {
+        console.error(err);
+        $("state").textContent = "Не удалось включить микрофон";
+      }
+    });
+  </script>
+</body>
+</html>

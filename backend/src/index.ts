@@ -22,6 +22,8 @@ interface Env {
   SESSION_SECRET: string; // signs dashboard session tokens
   GEMINI_API_KEY: string; // speech-to-text (ElevenLabs' realtime recognition is weak on spoken Armenian)
   ELEVENLABS_API_KEY: string; // fallback speech-to-text (Scribe) when Gemini stalls
+  AZURE_SPEECH_KEY: string; // candidate speech-to-text with native hy-AM (compared on /lab/)
+  AZURE_SPEECH_REGION: string;
 }
 
 interface Settings {
@@ -270,6 +272,40 @@ async function scribeTranscript(env: Env, audio: Uint8Array, signal: AbortSignal
   return (((await res.json()) as { text?: string }).text ?? "").trim();
 }
 
+async function azureTranscript(env: Env, audio: Uint8Array, signal: AbortSignal): Promise<string> {
+  const res = await fetch(
+    `https://${env.AZURE_SPEECH_REGION}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language=hy-AM&format=simple`,
+    { method: "POST", headers: { "Ocp-Apim-Subscription-Key": env.AZURE_SPEECH_KEY, "content-type": "audio/wav; codecs=audio/pcm; samplerate=16000" }, body: audio, signal },
+  );
+  if (!res.ok) throw new Error(`azure ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return (((await res.json()) as { DisplayText?: string }).DisplayText ?? "").trim();
+}
+
+/** /lab/: the same phrase through every recognizer, each with its own timing, to pick one on real voices. */
+async function compareTranscripts(env: Env, req: Request): Promise<Response> {
+  const audio = new Uint8Array(await req.arrayBuffer());
+  if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
+  const audioB64 = base64(audio);
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 30_000);
+  const run = async (name: string, fn: () => Promise<string>) => {
+    const t0 = Date.now();
+    try {
+      return { name, text: await fn(), ms: Date.now() - t0 };
+    } catch (err) {
+      return { name, error: String(err).slice(0, 120), ms: Date.now() - t0 };
+    }
+  };
+  const results = await Promise.all([
+    run("Azure (hy-AM)", () => azureTranscript(env, audio, abort.signal)),
+    run("Gemini 3.5 Flash", () => geminiTranscript(env, "gemini-3.5-flash", audioB64, abort.signal)),
+    run("Gemini 3.5 Flash-Lite", () => geminiTranscript(env, "gemini-3.5-flash-lite", audioB64, abort.signal)),
+    run("ElevenLabs Scribe", () => scribeTranscript(env, audio, abort.signal)),
+  ]);
+  clearTimeout(timeout);
+  return json({ results });
+}
+
 async function transcribe(env: Env, req: Request): Promise<Response> {
   const audio = new Uint8Array(await req.arrayBuffer());
   if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
@@ -446,6 +482,11 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await transcribe(env, req);
+      }
+      if (path === "/api/stt-compare" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await compareTranscripts(env, req);
       }
 
       if (path.startsWith("/tools/")) {
