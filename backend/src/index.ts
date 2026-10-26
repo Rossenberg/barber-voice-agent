@@ -233,16 +233,31 @@ function base64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-async function geminiTranscript(env: Env, model: string, body: string, signal: AbortSignal): Promise<string> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+// New Gemini API keys can't use generateContent with these models any more (404), only the
+// Interactions API.
+async function geminiTranscript(env: Env, model: string, audioB64: string, signal: AbortSignal): Promise<string> {
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
-    body,
+    body: JSON.stringify({
+      model,
+      store: false,
+      input: [
+        { type: "text", text: STT_PROMPT },
+        { type: "audio", data: audioB64, mime_type: "audio/wav" },
+      ],
+      generation_config: { temperature: 0, thinking_level: "minimal" },
+    }),
     signal,
   });
   if (!res.ok) throw new Error(`${model} ${res.status} ${(await res.text()).slice(0, 200)}`);
-  const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
-  return (data.candidates?.[0]?.content?.parts ?? []).filter((p) => p.text && !p.thought).map((p) => p.text).join(" ").trim();
+  const data = (await res.json()) as { steps?: { type: string; content?: { type: string; text?: string }[] }[] };
+  return (data.steps ?? [])
+    .filter((s) => s.type === "model_output")
+    .flatMap((s) => s.content ?? [])
+    .map((c) => c.text ?? "")
+    .join(" ")
+    .trim();
 }
 
 async function scribeTranscript(env: Env, audio: Uint8Array, signal: AbortSignal): Promise<string> {
@@ -258,10 +273,7 @@ async function scribeTranscript(env: Env, audio: Uint8Array, signal: AbortSignal
 async function transcribe(env: Env, req: Request): Promise<Response> {
   const audio = new Uint8Array(await req.arrayBuffer());
   if (audio.length < 1000 || audio.length > MAX_AUDIO_BYTES) return json({ error: "bad_audio" }, 400);
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: STT_PROMPT }, { inline_data: { mime_type: "audio/wav", data: base64(audio) } }] }],
-    generationConfig: { temperature: 0, maxOutputTokens: 200, thinkingConfig: { thinkingLevel: "minimal" } },
-  });
+  const audioB64 = base64(audio);
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), STT_TIMEOUT_MS);
   const attempt = (name: string, delay: number, run: () => Promise<string>) =>
@@ -272,7 +284,7 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
   try {
     const [model, text] = (
       await Promise.any([
-        ...STT_MODELS.map((m) => attempt(m, 0, () => geminiTranscript(env, m, body, abort.signal))),
+        ...STT_MODELS.map((m) => attempt(m, 0, () => geminiTranscript(env, m, audioB64, abort.signal))),
         attempt("scribe_v2", SCRIBE_DELAY_MS, () => scribeTranscript(env, audio, abort.signal)),
       ])
     ).split("\u0000");
