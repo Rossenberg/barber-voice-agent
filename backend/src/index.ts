@@ -346,7 +346,11 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
 
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
-  const voice = new URL(req.url).searchParams.get("voice") === "male" ? "cedar" : "marin";
+  const params = new URL(req.url).searchParams;
+  const voice = params.get("voice") === "male" ? "cedar" : "marin";
+  // "text": OpenAI only hears and thinks; the page speaks the reply with ElevenLabs' Armenian voices
+  // (OpenAI's own Armenian voice has a strong foreign accent).
+  const textOnly = params.get("speech") === "elevenlabs";
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
   const instructions = [
@@ -365,6 +369,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         type: "realtime",
         model: "gpt-realtime-2.1",
         instructions,
+        ...(textOnly ? { output_modalities: ["text"] } : {}),
         audio: {
           input: { transcription: { model: "gpt-transcribe", language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high" } },
           output: { voice },
@@ -375,6 +380,21 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const data = (await res.json()) as { value?: string; error?: { message?: string } };
   if (!res.ok || !data.value) return json({ error: data.error?.message ?? `openai ${res.status}` }, 502);
   return json({ key: data.value, model: "gpt-realtime-2.1" });
+}
+
+/** Streams Armenian speech (raw 24 kHz 16-bit PCM) for one reply, for the /realtime/ hybrid mode. */
+async function ttsStream(env: Env, req: Request): Promise<Response> {
+  const { text, voice } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string };
+  const clean = cleanText(text, 500);
+  if (!clean) return json({ error: "no_text" }, 400);
+  const voiceId = voice === "male" ? "JBFqnCBsd6RMkjVDRZzb" : "cgSgspJ2msm6clMCkdW9"; // George / Jessica, as on the agent
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000`, {
+    method: "POST",
+    headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ text: clean, model_id: "eleven_v4_turbo", language_code: "hy" }),
+  });
+  if (!res.ok || !res.body) return json({ error: `tts ${res.status} ${(await res.text()).slice(0, 200)}` }, 502);
+  return new Response(res.body, { headers: { "content-type": "audio/pcm", "cache-control": "no-store" } });
 }
 
 // ---------------------------------------------------------------- dashboard
@@ -529,6 +549,11 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await realtimeSession(env, req);
+      }
+      if (path === "/api/tts" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await ttsStream(env, req);
       }
       if (path === "/api/stt-compare" && req.method === "POST") {
         const origin = req.headers.get("origin");

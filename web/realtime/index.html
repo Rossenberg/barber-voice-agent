@@ -22,10 +22,14 @@
 <body>
   <main class="wrap">
     <h1>OpenAI Realtime</h1>
-    <p class="muted">Здесь модель сама слышит и сразу отвечает голосом, как ChatGPT Voice. Календаря нет: любое время считается свободным. Послушай, как она говорит по-армянски и как быстро отвечает. Под каждым ответом видно, через сколько секунд после конца твоей фразы она заговорила.</p>
+    <p class="muted">OpenAI слышит тебя и сразу придумывает ответ, а произносит его армянский голос ElevenLabs. Можно переключить на голос самого OpenAI для сравнения. Календаря нет: любое время считается свободным. Послушай, как она говорит по-армянски и как быстро отвечает. Под каждым ответом видно, через сколько секунд после конца твоей фразы она заговорила.</p>
+    <div class="voices" role="group" aria-label="Speech">
+      <button class="voice" data-speech="elevenlabs" aria-pressed="true"><span class="av">Հ</span><span><b>Армянский голос</b><span>OpenAI думает, ElevenLabs говорит</span></span></button>
+      <button class="voice" data-speech="openai" aria-pressed="false"><span class="av">AI</span><span><b>Голос OpenAI</b><span>с акцентом, для сравнения</span></span></button>
+    </div>
     <div class="voices" role="group" aria-label="Voice">
-      <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b>Женский</b><span>marin</span></span></button>
-      <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b>Мужской</b><span>cedar</span></span></button>
+      <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b>Женский</b><span>Ани</span></span></button>
+      <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b>Мужской</b><span>Арам</span></span></button>
     </div>
     <button class="btn btn-accent" id="start">Позвонить</button>
     <button class="btn btn-end" id="stop" hidden>Завершить</button>
@@ -35,12 +39,18 @@
 
   <script type="module">
     const $ = (id) => document.getElementById(id);
-    let voice = "female", pc = null, stream = null, stoppedAt = 0, latShown = false, agentEl = null;
+    const DEBUG = new URLSearchParams(location.search).has("debug");
+    let voice = "female", speech = "elevenlabs";
+    let pc = null, stream = null, micTrack = null, actx = null;
+    let stoppedAt = 0, agentEl = null, textBuf = "";
+    let playEnd = 0, sources = [], unmuteTimer = null;
 
-    document.querySelectorAll(".voice").forEach((b) => b.addEventListener("click", () => {
-      voice = b.dataset.voice;
-      document.querySelectorAll(".voice").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    const pick = (sel, attr, set) => document.querySelectorAll(sel).forEach((b) => b.addEventListener("click", () => {
+      set(b.dataset[attr]);
+      document.querySelectorAll(sel).forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     }));
+    pick(".voice[data-voice]", "voice", (v) => (voice = v));
+    pick(".voice[data-speech]", "speech", (v) => (speech = v));
 
     function add(text, cls) {
       const div = document.createElement("div");
@@ -51,48 +61,92 @@
       return div;
     }
 
+    function showLatency(el) {
+      if (!stoppedAt || !el || el.querySelector(".lat")) return;
+      const lat = document.createElement("span");
+      lat.className = "lat";
+      lat.textContent = `заговорил через ${((performance.now() - stoppedAt) / 1000).toFixed(1)} с`;
+      el.append(lat);
+      stoppedAt = 0;
+    }
+
+    // The mic is muted while our own TTS plays, otherwise OpenAI would hear the assistant's voice as the caller.
+    function setMic(on) {
+      clearTimeout(unmuteTimer);
+      if (on) unmuteTimer = setTimeout(() => micTrack && (micTrack.enabled = true), 250);
+      else if (micTrack) micTrack.enabled = false;
+    }
+
+    /** Speaks a reply with ElevenLabs (streamed 24 kHz PCM, played as it arrives). */
+    async function speak(text, el) {
+      const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
+      if (!res.ok || !res.body) return add(`Ошибка голоса: ${res.status}`, "tool");
+      setMic(false);
+      const reader = res.body.getReader();
+      let rest = new Uint8Array(0), first = true;
+      playEnd = Math.max(playEnd, actx.currentTime + 0.05);
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const bytes = new Uint8Array(rest.length + value.length);
+        bytes.set(rest); bytes.set(value, rest.length);
+        const n = bytes.length >> 1;
+        rest = bytes.slice(n * 2);
+        if (!n) continue;
+        const view = new DataView(bytes.buffer, 0, n * 2);
+        const buf = actx.createBuffer(1, n, 24000);
+        const ch = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) ch[i] = view.getInt16(i * 2, true) / 32768;
+        const src = actx.createBufferSource();
+        src.buffer = buf;
+        src.connect(actx.destination);
+        src.start(playEnd);
+        sources.push(src);
+        if (first) { first = false; showLatency(el); }
+        playEnd += buf.duration;
+      }
+      const left = Math.max(0, playEnd - actx.currentTime);
+      setTimeout(() => { if (actx && actx.currentTime >= playEnd - 0.01) { sources = []; setMic(true); $("state").textContent = "Слушаю"; } }, left * 1000 + 30);
+    }
+
     function onEvent(e) {
       const ev = JSON.parse(e.data);
-      if (new URLSearchParams(location.search).has("debug")) console.log(ev.type, ev);
+      if (DEBUG) console.log(ev.type, ev);
       switch (ev.type) {
         case "input_audio_buffer.speech_started":
           $("state").textContent = "Слышу тебя…";
           break;
         case "input_audio_buffer.speech_stopped":
           stoppedAt = performance.now();
-          latShown = false;
           agentEl = null;
           $("state").textContent = "Отвечает…";
           break;
         case "conversation.item.input_audio_transcription.completed":
           add(ev.transcript?.trim() || "…", "user");
           break;
+        // OpenAI speaking itself
         case "output_audio_buffer.started":
-        case "response.output_audio.delta":
-        case "response.output_audio_transcript.delta":
-          if (stoppedAt && !latShown) {
-            latShown = true;
-            const sec = ((performance.now() - stoppedAt) / 1000).toFixed(1);
-            agentEl = add("", "agent");
-            agentEl.dataset.lat = sec;
-          }
-          if (ev.type === "response.output_audio_transcript.delta") {
-            agentEl ??= add("", "agent");
-            agentEl.textContent += ev.delta ?? "";
-          }
+          agentEl ??= add("", "agent");
+          showLatency(agentEl);
           break;
         case "response.output_audio_transcript.done":
           agentEl ??= add("", "agent");
-          agentEl.textContent = ev.transcript ?? agentEl.textContent;
-          if (agentEl.dataset.lat) {
-            const lat = document.createElement("span");
-            lat.className = "lat";
-            lat.textContent = `заговорила через ${agentEl.dataset.lat} с`;
-            agentEl.append(lat);
-          }
+          agentEl.prepend(ev.transcript ?? "");
           agentEl = null;
           $("state").textContent = "Слушаю";
           break;
+        // text only: ElevenLabs speaks
+        case "response.output_text.delta":
+          textBuf += ev.delta ?? "";
+          break;
+        case "response.output_text.done": {
+          const text = (ev.text ?? textBuf).trim();
+          textBuf = "";
+          if (!text) break;
+          const el = add(text, "agent");
+          speak(text, el);
+          break;
+        }
         case "error":
           add(`Ошибка: ${ev.error?.message ?? "unknown"}`, "tool");
           break;
@@ -102,15 +156,19 @@
     async function start() {
       $("start").disabled = true;
       $("state").textContent = "Подключаю…";
+      actx = new AudioContext(); // created on the tap so iPhone allows sound
       try {
-        const sess = await (await fetch(`/api/realtime-session?voice=${voice}`, { method: "POST" })).json();
+        const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}`, { method: "POST" })).json();
         if (!sess.key) throw new Error(sess.error || "no key");
         pc = new RTCPeerConnection();
-        const audio = new Audio();
-        audio.autoplay = true;
-        pc.ontrack = (e) => (audio.srcObject = e.streams[0]);
+        if (speech === "openai") {
+          const audio = new Audio();
+          audio.autoplay = true;
+          pc.ontrack = (e) => (audio.srcObject = e.streams[0]);
+        }
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-        pc.addTrack(stream.getTracks()[0]);
+        micTrack = stream.getTracks()[0];
+        pc.addTrack(micTrack);
         const dc = pc.createDataChannel("oai-events");
         dc.onmessage = onEvent;
         dc.onopen = () => dc.send(JSON.stringify({ type: "response.create", response: { instructions: "Greet the caller in Armenian in one short sentence: the barbershop name and «Ինչո՞վ օգնեմ»." } }));
@@ -134,8 +192,9 @@
     function stop() {
       pc?.close();
       stream?.getTracks().forEach((t) => t.stop());
-      pc = null;
-      stream = null;
+      sources.forEach((s) => { try { s.stop(); } catch {} });
+      actx?.close();
+      pc = null; stream = null; micTrack = null; actx = null; sources = []; playEnd = 0;
       $("start").hidden = false;
       $("stop").hidden = true;
       if (!$("state").textContent.startsWith("Не получилось")) $("state").textContent = "Звонок завершён";
