@@ -11,13 +11,16 @@ const env = Object.fromEntries(readFileSync(join(ROOT, "backend/.env"), "utf8").
 const { agent_id } = JSON.parse(readFileSync(join(ROOT, "agent/elevenlabs.json"), "utf8"));
 const SITE = "https://barber-voice-agent.gasparyaninvest.workers.dev";
 
-const CANDIDATES = [
+const ALL = [
   ["gemini-3.8-flash", null],
   ["gemini-3.8-flash", "low"],
   ["gemini-3.5-flash", "minimal"],
   ["gemini-3.5-flash-lite", "minimal"],
   ["gemini-3.1-flash-lite", "minimal"],
 ];
+// optional filter: node scripts/llm-lab.mjs gemini-3.8-flash:low gemini-3.5-flash:minimal
+const pick = process.argv.slice(2);
+const CANDIDATES = pick.length ? pick.map((p) => { const [m, e] = p.split(":"); return [m, e && e !== "default" ? e : null]; }) : ALL;
 const LINES = ["Բարև բարև, Արամ ջան, ոնց ես ախպերս", "Թրաշս դզեմ, ինչ արժե՞", "Էգուց տասնմեկին տեղ կա՞"];
 
 async function api(method, path, body) {

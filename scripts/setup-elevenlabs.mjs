@@ -26,10 +26,11 @@ const VOICES = {
 
 const AGENT = {
   name: "Blade Barbershop — voice assistant",
-  // Flash-Lite with no thinking: fastest first reply; Armenian replies were fine in scripts/llm-lab.mjs.
+  // 3.5 Flash with low thinking: ~1.1–1.5 s per reply with clean Armenian (scripts/llm-lab.mjs, simulate.mjs).
+  // Flash-Lite and "minimal" thinking were as fast but leaked tool names into speech.
   // gemini-3.8-flash (the ~/voice-agent-demo winner) took 1.1–1.6 s per reply on real calls.
-  llm: "gemini-3.5-flash-lite",
-  reasoningEffort: "minimal",
+  llm: "gemini-3.5-flash",
+  reasoningEffort: "low",
   ttsModel: "eleven_v4_turbo", // ~100 ms, speaks Armenian; Flash/Multilingual v2 don't
   maxDurationSec: 240,
   dailyCallLimit: 150,
