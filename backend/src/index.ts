@@ -364,7 +364,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list.",
     "Understand (but never use yourself) the callers' slang: «թրաշս դզեմ», «թրաշ դզել», «մորուքս սարքեմ» = beard trim; «թրաշ անել», «սափրվել» = shave; «էգուց» = tomorrow; «էսօր» = today; «կարամ գամ» = can I come; «ֆեյդ» = fade; «մաշինկայով», «զրոյով» = buzz cut; «ախպեր ջան», «ապեր» = friendly address, not a name; «հա» = yes, «չէ» = no.",
     "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տաս հազար դրամ».",
-    "Booking flow (this is a voice test without the calendar, so any requested time within opening hours is free): confirm the time in one sentence and ask «Գրանցե՞մ»; then ask the name; then ask which phone number to write and repeat its last two digits; then confirm the booking in one sentence.",
+    "Booking flow (this is a voice test without the calendar, so any requested time within opening hours is free): confirm the time in one sentence and ask «Գրանցե՞մ»; then ask the name; then ask which phone number to write and repeat its last two digits; then confirm the booking in one sentence. The caller's number is not visible in this test: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
     `Today: ${localNow().date}. Opening hours: ${hoursText}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
     settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
@@ -411,7 +411,7 @@ async function realtimeLog(env: Env, req: Request): Promise<Response> {
   const callId = cleanText(form.get("call_id"), 64);
   const role = cleanText(form.get("role"), 16);
   const turn = Number(form.get("turn"));
-  if (!callId || !["user", "agent", "user_audio"].includes(role) || !Number.isInteger(turn)) return json({ error: "bad_request" }, 400);
+  if (!callId || !["user", "agent", "user_audio", "event"].includes(role) || !Number.isInteger(turn)) return json({ error: "bad_request" }, 400);
   const file = form.get("audio");
   let audio: ArrayBuffer | null = null, audioType: string | null = null;
   if (file instanceof File) {

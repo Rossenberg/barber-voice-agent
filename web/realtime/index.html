@@ -46,7 +46,7 @@
     let voice = "female", speech = "elevenlabs";
     let pc = null, stream = null, micTrack = null, actx = null;
     let stoppedAt = 0, agentEl = null, textBuf = "";
-    let playEnd = 0, sources = [], unmuteTimer = null;
+    let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0;
     // Every call is saved (text + the audio of each caller phrase) so recognition mistakes can be analysed.
     let callId = "", turn = 0, recorder = null, playing = false;
     function log(role, fields) {
@@ -94,6 +94,11 @@
 
     /** Speaks a reply with ElevenLabs (streamed 24 kHz PCM, played as it arrives). */
     async function speak(text, el) {
+      // A newer reply replaces the one still playing (OpenAI sometimes answers twice when it splits a long phrase).
+      const gen = ++speakGen;
+      sources.forEach((s) => { try { s.stop(); } catch {} });
+      sources = [];
+      playEnd = 0;
       const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
       if (!res.ok || !res.body) return add(`Ошибка голоса: ${res.status}`, "tool");
       setMic(false);
@@ -104,6 +109,7 @@
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (gen !== speakGen) { reader.cancel(); return; }
         const bytes = new Uint8Array(rest.length + value.length);
         bytes.set(rest); bytes.set(value, rest.length);
         const n = bytes.length >> 1;
@@ -188,7 +194,15 @@
         stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
         micTrack = stream.getTracks()[0];
         pc.addTrack(micTrack);
+        pc.onconnectionstatechange = () => {
+          const st = pc?.connectionState;
+          if (st === "failed" || st === "disconnected") {
+            $("state").textContent = st === "failed" ? "Связь прервалась" : "Связь нестабильна…";
+            log("event", { text: `connection ${st}` });
+          }
+        };
         const dc = pc.createDataChannel("oai-events");
+        dc.onclose = () => log("event", { text: "data channel closed" });
         dc.onmessage = onEvent;
         // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
         const cfg = await (await fetch("/api/public/config", { cache: "no-store" })).json();
