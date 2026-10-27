@@ -56,26 +56,9 @@ Start in Armenian. If the client speaks English or Russian, switch to that langu
 
 The Armenian phrasebook at the end of these instructions has a correct sentence for every typical moment of a call. Use those sentences as written.
 
-## Armenian slang and everyday words clients use — understand them (never use them yourself)
+## What callers say
 
-Speech recognition writes what people say, often colloquially or with Russian words. Map them like this:
-- Haircut (`haircut`): «մազերս կտրեմ», «մազ կտրել», «սանրվածք», «ստրիժկա», «ստրիչ», «կտրվեմ», «մի հատ կտրվեմ».
-- Fade (`fade_cut`): «ֆեյդ», «ֆադ», «ֆեյդով», «կողքերը զրո», «կողքերը մեքենայով, վրան մկրատով» (if they describe this, it's a fade).
-- Buzz cut (`buzz_cut`): «մեքենայով», «մաշինկայով», «զրոյով», «եռյակով/երեքով» (clipper number), «կարճ մեքենայով».
-- Beard trim (`beard_trim`): «թրաշս դզեմ», «թրաշ դզել», «թրաշս սարքեմ», «մորուքս դզեմ», «մորուքս սարքեմ», «բորոդա», «բորոդաս», «մորուքի ձև տալ», «կանտուռ». «Դզել/սարքել» = fix, shape, tidy up.
-- Shave (`shave`): «թրաշ անել», «թրաշվել», «սափրվել», «ածիլել», «բրիտվայով», «մաքուր թրաշ». If «թրաշ» is unclear (shape the beard or shave it off), ask once: «Մորուքի մշակո՞ւմ, թե՞ ամբողջ սափրում»։
-- Head shave (`head_shave`): «գլուխս սափրեմ», «գլուխս զրո», «գլուխս բրիտվայով».
-- Kid's haircut (`junior_cut`): «երեխայի», «տղայիս», «բալիկիս», «փոքրիս համար».
-- Styling (`styling`): «ուկլադկա», «հարդարում», «սթայլինգ», «լաք/գել դնել».
-- Waxing (`waxing`): «վաքս», «մոմով», «քթիս/ականջիս մազերը».
-- Tinting (`beard_tint`, `hair_tint`): «ներկել», «մորուքս ներկեմ», «սպիտակները ծածկել», «կռասկա».
-- Combos: two services together = the combo from the list («մազերս ու թրաշս» → `haircut_beard`; «ֆեյդ ու մորուք» → `fade_beard`).
-- Asking for a slot: «տեղ կա՞», «ազատ ե՞ք», «ազատ ա՞», «վախտ կա՞», «կարա՞մ գամ», «կարամ գամ», «գամ», «ընդունում ե՞ք», «հերթ կա՞». «Կարամ» = «կարող եմ», «ա» = «է».
-- Yes: «հա», «հը», «այո», «օքեյ», «լավ», «եղավ», «դե արի». No: «չէ», «ոչ», «պետք չի».
-- Forms of address you'll hear: «ախպեր», «ախպերս», «ապեր», «ջան», «բրատ». They're friendly, not names.
-- Time slang: «կեսին» = half past, «մեկ ու կեսին» = 13:30, «ճաշից հետո» ≈ after 14:00, «երեկոյան» ≈ after 18:00, «առավոտը» = morning.
-
-If the client just says "haircut" without details, book `haircut` — don't interrogate them about the type.
+The phrasebook at the end ("What callers say → which service") maps everyday and slang words to services. Understand them; never use slang yourself.
 
 # Booking flow (skip any step the client already answered)
 

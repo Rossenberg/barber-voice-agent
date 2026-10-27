@@ -49,6 +49,19 @@
     let voice = "female", speech = "elevenlabs";
     let pc = null, stream = null, micTrack = null, actx = null, dc = null;
     let toolOutputs = []; // calendar results waiting for the current response to finish
+    let pendingTurn = null; // waiting for the text transcript of the caller's phrase before replying
+
+    // Reply to the caller's phrase: hand the model the text transcript too (it understands better with both),
+    // or reply from the audio alone if the transcript is late.
+    function replyToTurn(transcript) {
+      if (!pendingTurn) return;
+      clearTimeout(pendingTurn);
+      pendingTurn = null;
+      if (transcript) {
+        dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.` }] } }));
+      }
+      dc?.send(JSON.stringify({ type: "response.create" }));
+    }
     let stoppedAt = 0, agentEl = null, textBuf = "";
     let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0;
     // Every call is saved (text + the audio of each caller phrase) so recognition mistakes can be analysed.
@@ -151,12 +164,16 @@
           sources = [];
           playEnd = 0;
           turn++;
+          clearTimeout(pendingTurn);
+          pendingTurn = setTimeout(() => replyToTurn(null), 1000); // the transcript usually arrives in 0.3-0.8 s
           stoppedAt = performance.now();
           agentEl = null;
           $("state").textContent = "Отвечает…";
           break;
         case "conversation.item.input_audio_transcription.completed":
           add(ev.transcript?.trim() || "…", "user");
+          if (stoppedAt) usage({ kind: "transcript_delay", ms: Math.round(performance.now() - stoppedAt) });
+          replyToTurn(ev.transcript?.trim());
           if (ev.usage) usage({ kind: "transcribe", usage: ev.usage });
           log("user", { text: ev.transcript?.trim() ?? "" });
           break;
@@ -225,7 +242,7 @@
       try {
         const caller = $("caller").value.trim();
         try { localStorage.setItem("bvCaller", caller); } catch {}
-        const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}`, { method: "POST" })).json();
+        const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${new URLSearchParams(location.search).get("stt") ? `&stt=${new URLSearchParams(location.search).get("stt")}` : ""}`, { method: "POST" })).json();
         if (!sess.key) throw new Error(sess.error || "no key");
         pc = new RTCPeerConnection();
         if (speech === "openai") {
@@ -291,7 +308,8 @@
       stream?.getTracks().forEach((t) => t.stop());
       sources.forEach((s) => { try { s.stop(); } catch {} });
       actx?.close();
-      pc = null; stream = null; micTrack = null; actx = null; dc = null; sources = []; playEnd = 0; toolOutputs = [];
+      clearTimeout(pendingTurn);
+      pc = null; stream = null; micTrack = null; actx = null; dc = null; sources = []; playEnd = 0; toolOutputs = []; pendingTurn = null;
       $("start").hidden = false;
       $("stop").hidden = true;
       if (!$("state").textContent.startsWith("Не получилось")) $("state").textContent = "Звонок завершён";

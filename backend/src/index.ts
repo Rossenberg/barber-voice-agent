@@ -441,6 +441,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const textOnly = params.get("speech") === "elevenlabs";
   // Caller ID: on a real phone line it comes from the call; the test page lets you type one in.
   const callerPhone = normalizePhone(params.get("caller"));
+  const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
   const name = voice === "cedar" ? "Արամ" : "Անի";
@@ -451,7 +452,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
     "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters.",
     "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list.",
-    "Understand (but never use yourself) the callers' slang: «թրաշս դզեմ», «թրաշ դզել», «մորուքս սարքեմ» = beard trim; «թրաշ անել», «սափրվել» = shave; «էգուց» = tomorrow; «էսօր» = today; «կարամ գամ» = can I come; «ֆեյդ» = fade; «մաշինկայով», «զրոյով» = buzz cut; «ախպեր ջան», «ապեր» = friendly address, not a name; «հա» = yes, «չէ» = no.",
+    "Callers' everyday words and slang are mapped to services in the phrasebook below (What callers say → which service). Understand them, never use slang yourself.",
     "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ».",
     PHRASEBOOK,
     "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
@@ -477,7 +478,9 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         tools: REALTIME_TOOLS,
         tool_choice: "auto",
         audio: {
-          input: { transcription: { model: "gpt-transcribe", language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high" } },
+          // create_response off: the page first adds the text transcript of the phrase (the model alone
+          // mis-heard «մազերս ներկեմ» as washing while gpt-transcribe got it right), then asks for the reply.
+          input: { transcription: { model: sttModel, language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high", create_response: false } },
           output: { voice },
         },
       },
