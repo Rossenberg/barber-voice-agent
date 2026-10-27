@@ -51,7 +51,7 @@ interface Service {
   sort: number;
 }
 
-const GRID_MIN = 15; // appointments start on :00, :15, :30, :45
+const GRID_MIN = 30; // appointments start on :00 and :30 (every service is 30 min, two services 60)
 const MIN_NOTICE_MIN = 30; // no bookings starting within the next half hour
 const MAX_DAYS_AHEAD = 60;
 const SESSION_TTL_MS = 30 * 86_400_000;
@@ -492,9 +492,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const textOnly = params.get("speech") === "elevenlabs";
   // Caller ID: on a real phone line it comes from the call; the test page lets you type one in.
   const callerPhone = normalizePhone(params.get("caller"));
-  // medium: a bit smarter than the default in our tests (repeats the caller's framing, waits for a time
-  // to be chosen before booking) at about the same speed and <0.5¢ more per call; high was only slower.
-  const effort = ["minimal", "low", "medium", "high"].includes(params.get("effort") ?? "") ? params.get("effort")! : "medium";
+  // Default effort: "medium" made real calls noticeably slower (2-6 s per reply) for little gain.
+  const effort = ["minimal", "low", "medium", "high"].includes(params.get("effort") ?? "") ? params.get("effort")! : null;
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
@@ -529,7 +528,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         model: "gpt-realtime-2.1",
         instructions,
         ...(textOnly ? { output_modalities: ["text"] } : {}),
-        reasoning: { effort },
+        ...(effort ? { reasoning: { effort } } : {}),
         tools: REALTIME_TOOLS,
         tool_choice: "auto",
         audio: {
