@@ -97,8 +97,9 @@ function closedReason(settings: Settings, date: string): ClosedReason | null {
   return null;
 }
 
-/** Free start times (minutes since midnight) on a date for a service of the given length. */
-async function freeStarts(db: D1Database, settings: Settings, date: string, durationMin: number): Promise<number[]> {
+/** Free start times (minutes since midnight) on a date for a service of the given length.
+ * `people` > 1: a group coming together needs that many free chairs at the same time. */
+async function freeStarts(db: D1Database, settings: Settings, date: string, durationMin: number, people = 1): Promise<number[]> {
   if (closedReason(settings, date)) return [];
   const [open, close] = settings.hours[weekdayOf(date)]!;
   const { results } = await db
@@ -112,7 +113,7 @@ async function freeStarts(db: D1Database, settings: Settings, date: string, dura
   for (let s = Math.ceil(open / GRID_MIN) * GRID_MIN; s + durationMin <= close; s += GRID_MIN) {
     if (s < earliest) continue;
     const e = s + durationMin;
-    if (results.filter((b) => b.start_min < e && b.end_min > s).length < settings.barbers) starts.push(s);
+    if (results.filter((b) => b.start_min < e && b.end_min > s).length + people <= settings.barbers) starts.push(s);
   }
   return starts;
 }
@@ -161,6 +162,45 @@ function findService(services: Service[], id: unknown): Service | undefined {
   return services.find((s) => s.id === key);
 }
 
+// Two services that have a cheaper combo on the price list are booked as that combo.
+const COMBOS: Record<string, string> = {
+  "beard_trim+haircut": "haircut_beard",
+  "beard_trim+fade_cut": "fade_beard",
+  "beard_trim+buzz_cut": "buzz_beard",
+  "haircut+shave": "haircut_shave",
+  "buzz_cut+shave": "buzz_shave",
+  "beard_trim+head_shave": "head_shave_beard",
+  "head_shave+shave": "head_shave_shave",
+};
+
+/**
+ * One person can want several services («haircut, beard and then styling»): service_id may hold several
+ * ids joined with "+" or ",". They become one appointment whose length and price are the sums.
+ */
+function resolveServices(services: Service[], raw: unknown): Service | undefined {
+  const ids = (typeof raw === "string" ? raw : "").split(/[+,]/).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  let picked = ids.map((id) => findService(services, id)).filter((x): x is Service => Boolean(x));
+  if (!picked.length || picked.length !== ids.length) return undefined;
+  for (const [pair, comboId] of Object.entries(COMBOS)) {
+    const [a, b] = pair.split("+");
+    const combo = findService(services, comboId);
+    if (combo && picked.some((p) => p.id === a) && picked.some((p) => p.id === b)) {
+      picked = [combo, ...picked.filter((p) => p.id !== a && p.id !== b)];
+    }
+  }
+  if (picked.length === 1) return picked[0];
+  return {
+    ...picked[0],
+    id: picked.map((p) => p.id).join("+"),
+    // «Կտրվածք + մորուքի մշակում + հարդարում»: only the first name keeps its capital letter
+    name_hy: picked.map((p, i) => (i ? p.name_hy.charAt(0).toLowerCase() + p.name_hy.slice(1) : p.name_hy)).join(" + "),
+    name_en: picked.map((p, i) => (i ? p.name_en.charAt(0).toLowerCase() + p.name_en.slice(1) : p.name_en)).join(" + "),
+    duration_min: picked.reduce((t, p) => t + p.duration_min, 0),
+    price_min: picked.reduce((t, p) => t + p.price_min, 0),
+    price_max: picked.some((p) => p.price_max) ? picked.reduce((t, p) => t + (p.price_max ?? p.price_min), 0) : null,
+  };
+}
+
 // ---------------------------------------------------------------- assistant tools
 
 const DISABLED = { success: false, error: "assistant_disabled", message: "The barbershop has switched the assistant off. Apologize and ask the client to call back later." };
@@ -169,15 +209,25 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
   const settings = await getSettings(env.DB);
   if (!settings.enabled) return DISABLED;
   const services = await getServices(env.DB, true);
-  const service = findService(services, body.service_id) ?? findService(services, "haircut") ?? services[0];
+  const service = resolveServices(services, body.service_id) ?? findService(services, "haircut") ?? services[0];
   const date = body.date;
   if (!isDate(date)) return { success: false, error: "bad_date", message: "Use YYYY-MM-DD.", today: localNow().date };
 
-  const base = { date, weekday: weekdayName(date), today: localNow().date, service: { id: service.id, name: service.name_hy, duration_min: service.duration_min } };
+  const base = {
+    date,
+    weekday: weekdayName(date),
+    today: localNow().date,
+    service: { id: service.id, name: service.name_hy, duration_min: service.duration_min, price: service.price_max ? `${service.price_min}-${service.price_max} AMD` : `${service.price_min} AMD` },
+    barbers: settings.barbers, // how many people can be served at the same time
+  };
+  const people = Math.min(Math.max(1, Math.round(Number(body.people) || 1)), 10);
+  if (people > settings.barbers) {
+    return { ...base, open: true, error: "too_many_people", message: `Only ${settings.barbers} people can be served at the same time: check them one after the other (people = ${settings.barbers} or 1).` };
+  }
   const closed = closedReason(settings, date);
   if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, settings, date, service.duration_min) };
 
-  const starts = await freeStarts(env.DB, settings, date, service.duration_min);
+  const starts = await freeStarts(env.DB, settings, date, service.duration_min, people);
   const requested = parseHHMM(body.time);
   if (requested !== null) {
     // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
@@ -242,8 +292,8 @@ async function insertBooking(env: Env, service: Service, date: string, start: nu
 async function createBooking(env: Env, body: Record<string, unknown>) {
   const settings = await getSettings(env.DB);
   if (!settings.enabled) return DISABLED;
-  const service = findService(await getServices(env.DB, true), body.service_id);
-  if (!service) return { success: false, error: "unknown_service", message: "Use a service id from the price list." };
+  const service = resolveServices(await getServices(env.DB, true), body.service_id);
+  if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
   const date = body.date;
   const start = parseHHMM(body.time);
   if (!isDate(date) || start === null) return { success: false, error: "bad_date_or_time", message: "Use YYYY-MM-DD and HH:MM." };
@@ -409,7 +459,8 @@ const REALTIME_TOOLS = [
         date: { type: "string", description: "YYYY-MM-DD, Yerevan time" },
         time: { type: "string", description: "Requested start HH:MM (24h), if the caller named a time" },
         part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for morning (before 12), afternoon (12-17) or evening (17+)" },
-        service_id: { type: "string", description: "Service id from the price list; default haircut" },
+        service_id: { type: "string", description: "Service id from the price list; several for one person joined with + (e.g. haircut+beard_trim+styling). Default haircut." },
+        people: { type: "integer", description: "How many people come at the same time (a group). Check with the longest person's services. Default 1." },
       },
       required: ["date"],
     },
@@ -417,11 +468,11 @@ const REALTIME_TOOLS = [
   {
     type: "function",
     name: "create_booking",
-    description: "Book the caller after they agreed to a free time and gave name and phone.",
+    description: "Book one person after they agreed to a free time and gave name and phone. For a group, call once per person.",
     parameters: {
       type: "object",
       properties: {
-        service_id: { type: "string" },
+        service_id: { type: "string", description: "One person's service(s): one id, or several joined with + (e.g. haircut+beard_trim+styling)" },
         date: { type: "string", description: "YYYY-MM-DD" },
         time: { type: "string", description: "HH:MM" },
         client_name: { type: "string" },

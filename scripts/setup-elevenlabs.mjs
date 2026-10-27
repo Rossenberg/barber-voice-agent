@@ -65,8 +65,9 @@ const TOOLS = [
     properties: {
       date: { type: "string", description: "Date in YYYY-MM-DD, Yerevan time. Work out 'today', 'tomorrow' (էգուց/վաղը) etc. from today's date." },
       time: { type: "string", description: "Optional requested start time, HH:MM 24h, e.g. 11:00 or 15:30." },
+      people: { type: "number", description: "How many people come at the same time (a group); check with the longest person's services. Default 1." },
       part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for the morning (before 12), afternoon (12-17) or evening (17+). Leave empty otherwise." },
-      service_id: { type: "string", description: "Service id from the price list, e.g. haircut, fade_cut, beard_trim. Default haircut." },
+      service_id: { type: "string", description: "Service id from the price list, e.g. haircut, fade_cut, beard_trim; several for one person joined with + (haircut+beard_trim+styling). Default haircut." },
     },
     required: ["date"],
   },
@@ -75,7 +76,7 @@ const TOOLS = [
     path: "/tools/create-booking",
     description: "Book the client. Call only after the client agreed to a time that check_availability confirmed as free.",
     properties: {
-      service_id: { type: "string", description: "Service id from the price list." },
+      service_id: { type: "string", description: "One person's service id(s) from the price list; several joined with + (haircut+beard_trim+styling). For a group, book each person separately." },
       date: { type: "string", description: "YYYY-MM-DD, Yerevan time." },
       time: { type: "string", description: "Start time HH:MM 24h." },
       client_name: { type: "string", description: "Client's first name." },
