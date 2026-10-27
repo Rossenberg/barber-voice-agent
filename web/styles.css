@@ -264,6 +264,22 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space
 .fab.show { transform: none; }
 .fab .btn { width: 100%; }
 
+/* call / chat switch and the chat */
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 12px; }
+.modes button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: 12px; background: none; color: var(--muted); font-weight: 700; font-size: 15px; }
+.modes button svg { width: 18px; height: 18px; }
+.modes button[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.chat { display: grid; gap: 10px; }
+.chat-log { min-height: 220px; max-height: 360px; margin-top: 0; padding: 4px 2px; }
+.chat-log:empty { display: flex; }
+.chat-log:empty::before { content: attr(data-empty); margin: auto; color: var(--muted); font-size: 14px; text-align: center; max-width: 26ch; }
+.chat-chips .chip { cursor: pointer; color: var(--text); }
+.chat-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.chat-form .input { min-height: 52px; border-radius: 999px; padding: 0 18px; }
+.chat-send { min-height: 52px; width: 52px; padding: 0; }
+.msg.agent.typing { letter-spacing: 0.25em; animation: pop 0.25s ease, blink 1s infinite; }
+.msg.booked { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+
 @media (min-width: 760px) {
   .hero { padding: 64px 0 56px; }
   .hero-grid { grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: 48px; }

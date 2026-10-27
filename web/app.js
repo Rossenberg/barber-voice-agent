@@ -24,6 +24,8 @@ const T = {
     "label.speaking": "Խոսում է…",
     "label.listening": "Լսում է…",
     "label.hearing": "Հասկանում է…",
+    "mode.call": "Զանգել", "mode.chat": "Գրել",
+    "chat.placeholder": "Գրեք հաղորդագրություն…", "chat.error": "Չհաջողվեց պատասխանել, փորձեք կրկին։", "chat.booked": "Գրանցված է ✓", "chat.off": "Բարբերն անջատել է ասիստենտին։",
     "label.notHeard": "Չլսեցի, խնդրում եմ կրկնեք",
     "label.ended": "Զանգն ավարտվեց։ Կարող եք կրկին զանգել։",
     "label.micBlocked": "Միկրոֆոնն արգելափակված է։ Թույլատրեք այն զննարկչում և կրկին փորձեք։",
@@ -80,6 +82,8 @@ const T = {
     "label.speaking": "Говорит…",
     "label.listening": "Слушает…",
     "label.hearing": "Распознаёт…",
+    "mode.call": "Позвонить", "mode.chat": "Написать",
+    "chat.placeholder": "Напишите сообщение…", "chat.error": "Не удалось ответить, попробуйте ещё раз.", "chat.booked": "Записано ✓", "chat.off": "Барбер выключил ассистента.",
     "label.notHeard": "Не расслышал, повторите, пожалуйста",
     "label.ended": "Звонок завершён. Можно позвонить ещё раз.",
     "label.micBlocked": "Микрофон заблокирован. Разрешите его в браузере и попробуйте снова.",
@@ -136,6 +140,8 @@ const T = {
     "label.speaking": "Speaking…",
     "label.listening": "Listening…",
     "label.hearing": "Understanding…",
+    "mode.call": "Call", "mode.chat": "Chat",
+    "chat.placeholder": "Type a message…", "chat.error": "Couldn’t reply, please try again.", "chat.booked": "Booked ✓", "chat.off": "The barber has switched the assistant off.",
     "label.notHeard": "Didn’t catch that, please repeat",
     "label.ended": "Call ended. You can call again.",
     "label.micBlocked": "The microphone is blocked. Allow it in your browser and try again.",
@@ -201,6 +207,7 @@ function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
   document.querySelectorAll("[data-i18n-html]").forEach((el) => (el.innerHTML = t(el.dataset.i18nHtml)));
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => (el.placeholder = t(el.dataset.i18nPlaceholder)));
   document.querySelectorAll("#langs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   document.querySelectorAll(".voice .av").forEach((el) => (el.textContent = t(`voice.${el.closest(".voice").dataset.voice}`)[0]));
   setLabel(labelKey);
@@ -461,11 +468,82 @@ async function start() {
   }
 }
 
+// ---------------------------------------------------------------- chat (same brain as the voice assistant)
+
+const chatLog = $("chatLog");
+let chatId = null, chatHistory = [], chatBusy = false;
+
+function chatAdd(text, cls) {
+  const div = document.createElement("div");
+  div.className = `msg ${cls}`;
+  div.textContent = text;
+  chatLog.append(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return div;
+}
+
+async function openChat() {
+  if (chatHistory.length) return;
+  if (!config) await loadConfig();
+  if (config && !config.enabled) return chatAdd(t("chat.off"), "tool");
+  const greeting = (config?.greeting ?? "Բարև ձեզ։ Ինչո՞վ օգնեմ։").replaceAll("{shop}", config?.shop_name ?? "").replaceAll("{name}", "Անի");
+  chatHistory.push({ role: "assistant", content: greeting });
+  chatAdd(greeting, "agent");
+}
+
+async function sendChat(text) {
+  text = text.trim();
+  if (!text || chatBusy) return;
+  chatBusy = true;
+  $("chatChips").hidden = true;
+  chatHistory.push({ role: "user", content: text });
+  chatAdd(text, "user");
+  const typing = chatAdd("•••", "agent typing");
+  try {
+    const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: chatId, messages: chatHistory }) });
+    const data = await res.json();
+    if (!res.ok || !data.reply) throw new Error(data.error || res.status);
+    chatId = data.id;
+    typing.remove();
+    chatHistory.push({ role: "assistant", content: data.reply });
+    if (data.booked) chatAdd(t("chat.booked"), "tool ok");
+    chatAdd(data.reply, "agent");
+  } catch (err) {
+    console.error(err);
+    typing.remove();
+    chatHistory.pop();
+    chatAdd(t("chat.error"), "tool");
+  } finally {
+    chatBusy = false;
+    $("chatInput").focus();
+  }
+}
+
+$("chatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = $("chatInput");
+  sendChat(input.value);
+  input.value = "";
+});
+document.querySelectorAll("#chatChips .chip").forEach((c) => c.addEventListener("click", () => sendChat(c.textContent)));
+document.querySelectorAll(".modes button").forEach((b) =>
+  b.addEventListener("click", () => {
+    if (conversation || connecting) return; // finish the call first
+    const chat = b.dataset.mode === "chat";
+    document.querySelectorAll(".modes button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    $("chatPane").hidden = !chat;
+    $("callPane").hidden = chat;
+    if (chat) fab.classList.remove("show");
+    if (chat) openChat();
+  }),
+);
+
 startBtn.addEventListener("click", start);
 endBtn.addEventListener("click", () => conversation?.endSession());
 document.querySelectorAll("[data-start]").forEach((el) =>
   el.addEventListener("click", () => {
     $("assistant").scrollIntoView({ behavior: "smooth", block: "center" });
+    document.querySelector('.modes button[data-mode="call"]')?.click();
     start();
   }),
 );
@@ -481,7 +559,7 @@ $("callerPhone").value = store.get("bvCaller") ?? "";
 $("callerPhone").addEventListener("change", (e) => store.set("bvCaller", e.target.value.trim()));
 
 // Floating call button appears on phones once the demo card scrolls away.
-new IntersectionObserver(([entry]) => fab.classList.toggle("show", !entry.isIntersecting && !conversation && !connecting), { threshold: 0.15 }).observe($("assistant"));
+new IntersectionObserver(([entry]) => fab.classList.toggle("show", !entry.isIntersecting && !conversation && !connecting && $("chatPane").hidden), { threshold: 0.15 }).observe($("assistant"));
 
 setVoice(voice);
 applyLang();

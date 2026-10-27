@@ -483,6 +483,53 @@ const REALTIME_TOOLS = [
   },
 ];
 
+/**
+ * Instructions shared by the voice assistant (/realtime/) and the website chat, so both think the same way:
+ * same phrasebook, calendar rules and price list; only how they talk differs (spoken words vs. chat text).
+ */
+async function assistantInstructions(env: Env, opts: { name: string; callerPhone: string | null; channel: "voice" | "chat" }): Promise<string> {
+  const settings = await getSettings(env.DB);
+  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
+  const { name, callerPhone } = opts;
+  const voice = opts.channel === "voice";
+  const shop = voice ? settings.shop_name_spoken || settings.shop_name : settings.shop_name;
+  return [
+    voice
+      ? `Your name is ${name}. You answer the phone for the barbershop called exactly «${shop}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`
+      : `Your name is ${name}. You answer the website chat of the barbershop called exactly «${shop}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`,
+    voice ? "The page has already greeted the caller, so don't greet again; answer what they say." : "The chat already showed a greeting, so don't greet again; answer what they write.",
+    "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
+    "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
+    voice
+      ? "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters."
+      : "This is a text chat: the barbershop's name may be written in Latin letters as above.",
+    voice
+      ? "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list."
+      : "Be brief: one or two short sentences per message. Ask one thing at a time. No markdown, no lists, no emojis. List the whole price list only if they ask for all prices.",
+    "Callers' everyday words and slang are mapped to services in the phrasebook below (What callers say → which service). Understand them, never use slang yourself.",
+    voice
+      ? "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ»."
+      : "In the chat write times and prices in digits, they're easier to read: «վաղը ժամը 11:30-ին», «10 000 դրամ». Otherwise follow the phrasebook's wording.",
+    PHRASEBOOK,
+    "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
+    voice
+      ? "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments."
+      : "In the chat don't write «Մեկ րոպե, հիմա կնայեմ» — just check the calendar and answer.",
+    voice
+      ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
+      : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
+    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
+    !voice
+      ? "Phone: ask «Գրեք Ձեր հեռախոսահամարը։» and check the last two digits."
+      : callerPhone
+        ? `Caller's phone number (caller ID): ${callerPhone}. Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» — yes → book with ${callerPhone} and ask nothing more about the phone; no → «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits.`
+        : "The caller's number is unknown: ask «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits. If they say «this number» / «the one I'm calling from», explain the number isn't visible and ask them to dictate it.",
+    `Today: ${localNow().date} (${weekdayName(localNow().date)}), now ${toHHMM(localNow().minutes)} Yerevan time. Opening hours: ${hoursText}.`,
+    `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
+    settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -495,30 +542,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   // Default effort: "medium" made real calls noticeably slower (2-6 s per reply) for little gain.
   const effort = ["minimal", "low", "medium", "high"].includes(params.get("effort") ?? "") ? params.get("effort")! : null;
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
-  const settings = await getSettings(env.DB);
-  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
-  const name = voice === "cedar" ? "Արամ" : "Անի";
-  const instructions = [
-    `Your name is ${name}. You answer the phone for the barbershop called exactly «${settings.shop_name_spoken || settings.shop_name}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`,
-    "The page has already greeted the caller, so don't greet again; answer what they say.",
-    "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
-    "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
-    "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters.",
-    "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list.",
-    "Callers' everyday words and slang are mapped to services in the phrasebook below (What callers say → which service). Understand them, never use slang yourself.",
-    "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ».",
-    PHRASEBOOK,
-    "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
-    "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments.",
-    "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
-    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
-    callerPhone
-      ? `Caller's phone number (caller ID): ${callerPhone}. Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» — yes → book with ${callerPhone} and ask nothing more about the phone; no → «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits.`
-      : "The caller's number is unknown: ask «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits. If they say «this number» / «the one I'm calling from», explain the number isn't visible and ask them to dictate it.",
-    `Today: ${localNow().date} (${weekdayName(localNow().date)}). Opening hours: ${hoursText}.`,
-    `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
-    settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
-  ].filter(Boolean).join("\n");
+  const instructions = await assistantInstructions(env, { name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
@@ -579,6 +603,70 @@ async function realtimeLog(env: Env, req: Request): Promise<Response> {
     .bind(callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
     .run();
   return json({ ok: true });
+}
+
+// ---------------------------------------------------------------- website chat
+
+// Compared on the same Armenian booking chat: gpt-6.1-terra was correct and quick (2-3.5 s);
+// gpt-6-luna mixed up times, gpt-5.4-mini booked without a phone and the wrong service, gpt-5.5 was slow (4-6 s).
+const CHAT_MODELS = ["gpt-6.1-terra", "gpt-6-luna", "gpt-5.4-mini", "gpt-5.5"];
+const CHAT_MODEL = "gpt-6.1-terra";
+
+/** Website chat: same instructions, phrasebook and calendar tools as the voice assistant, in text. */
+async function chatReply(env: Env, req: Request): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as { id?: string; messages?: { role?: string; content?: string }[]; model?: string };
+  const chatId = cleanText(body.id, 64) || crypto.randomUUID();
+  const history = (body.messages ?? [])
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .slice(-30)
+    .map((m) => ({ role: m.role as "user" | "assistant", content: cleanText(m.content, 1000) }));
+  if (!history.length || history[history.length - 1].role !== "user") return json({ error: "bad_request" }, 400);
+  const model = CHAT_MODELS.includes(body.model ?? "") ? body.model! : CHAT_MODEL;
+
+  const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
+  const tools = REALTIME_TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  const logLine = (role: string, text: string, ms?: number) =>
+    env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms) VALUES (?, ?, ?, ?, ?)").bind(`chat-${chatId}`, history.length, role, text.slice(0, 4000), ms ?? null).run();
+
+  const t0 = Date.now();
+  let booked = false;
+  for (let round = 0; round < 5; round++) {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+      // GPT-6 only allows function tools in chat completions with reasoning off
+      body: JSON.stringify({ model, messages: conv, tools, ...(model.startsWith("gpt-6") ? { reasoning_effort: "none" } : {}) }),
+    });
+    if (!res.ok) {
+      console.error("chat", res.status, (await res.text()).slice(0, 300));
+      return json({ error: "chat_failed" }, 502);
+    }
+    const msg = ((await res.json()) as { choices: { message: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] }).choices[0].message;
+    if (msg.tool_calls?.length) {
+      conv.push(msg);
+      for (const call of msg.tool_calls) {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {}
+        const result =
+          call.function.name === "check_availability"
+            ? await checkAvailability(env, args)
+            : call.function.name === "create_booking"
+              ? await createBooking(env, { ...args, conversation_id: `chat-${chatId}` })
+              : { error: "unknown_tool" };
+        if (call.function.name === "create_booking" && (result as { success?: boolean }).success) booked = true;
+        await logLine("event", `${call.function.name} ${JSON.stringify(args)} → ${JSON.stringify(result).slice(0, 600)}`);
+        conv.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+      }
+      continue;
+    }
+    const reply = (msg.content ?? "").trim();
+    await logLine("user", history[history.length - 1].content);
+    await logLine("agent", reply, Date.now() - t0);
+    return json({ id: chatId, reply, booked, model });
+  }
+  return json({ error: "too_many_steps" }, 502);
 }
 
 // ---------------------------------------------------------------- dashboard
@@ -744,6 +832,11 @@ export default {
         if (name === "check_availability") return json(await checkAvailability(env, args ?? {}));
         if (name === "create_booking") return json(await createBooking(env, { ...(args ?? {}), conversation_id: "realtime" }));
         return json({ error: "unknown_tool" }, 400);
+      }
+      if (path === "/api/chat" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await chatReply(env, req);
       }
       if (path === "/api/rt-log" && req.method === "POST") {
         const origin = req.headers.get("origin");

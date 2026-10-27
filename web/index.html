@@ -40,6 +40,25 @@
             <span class="status" id="status" data-state="idle" data-i18n="status.ready">Պատրաստ է</span>
           </div>
 
+          <div class="modes" role="tablist" aria-label="Mode">
+            <button role="tab" data-mode="call" aria-selected="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="mode.call">Զանգել</span></button>
+            <button role="tab" data-mode="chat" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="mode.chat">Գրել</span></button>
+          </div>
+
+          <div class="chat" id="chatPane" hidden>
+            <div class="transcript chat-log" id="chatLog" aria-live="polite"></div>
+            <div class="chips chat-chips" id="chatChips">
+              <button class="chip" type="button">Թրաշս դզեմ, ինչ արժե՞</button>
+              <button class="chip" type="button">Վաղը առավոտյան տեղ կա՞</button>
+              <button class="chip" type="button">Ես ու ընկերս ենք գալու</button>
+            </div>
+            <form class="chat-form" id="chatForm">
+              <input class="input" id="chatInput" autocomplete="off" maxlength="500" data-i18n-placeholder="chat.placeholder" placeholder="Գրեք հաղորդագրություն…">
+              <button class="btn btn-accent chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
+            </form>
+          </div>
+
+          <div class="call-pane" id="callPane">
           <div class="voices" id="voices" role="group" aria-label="Voice">
             <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b data-i18n="voice.female">Անի</b><span data-i18n="voice.femaleHint">Կանացի ձայն</span></span></button>
             <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b data-i18n="voice.male">Արամ</b><span data-i18n="voice.maleHint">Տղամարդու ձայն</span></span></button>
@@ -82,6 +101,7 @@
             </label>
             <p data-i18n="caller.hint">Իրական զանգի ժամանակ համարը որոշվում է ավտոմատ, և ասիստենտը հարցնում է՝ պահե՞լ այն։</p>
           </details>
+          </div>
         </div>
       </div>
     </section>
