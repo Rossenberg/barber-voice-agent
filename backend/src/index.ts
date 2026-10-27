@@ -439,6 +439,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   // "text": OpenAI only hears and thinks; the page speaks the reply with ElevenLabs' Armenian voices
   // (OpenAI's own Armenian voice has a strong foreign accent).
   const textOnly = params.get("speech") === "elevenlabs";
+  // Caller ID: on a real phone line it comes from the call; the test page lets you type one in.
+  const callerPhone = normalizePhone(params.get("caller"));
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
   const name = voice === "cedar" ? "Արամ" : "Անի";
@@ -455,7 +457,10 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
     "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments.",
     "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
-    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; ask the phone number and repeat its last two digits; then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times. The caller's number is not visible on this test page: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
+    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
+    callerPhone
+      ? `Caller's phone number (caller ID): ${callerPhone}. Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» — yes → book with ${callerPhone} and ask nothing more about the phone; no → «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits.`
+      : "The caller's number is unknown: ask «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits. If they say «this number» / «the one I'm calling from», explain the number isn't visible and ask them to dictate it.",
     `Today: ${localNow().date} (${weekdayName(localNow().date)}). Opening hours: ${hoursText}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
     settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",

@@ -31,6 +31,9 @@
       <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b>Женский</b><span>Ани</span></span></button>
       <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b>Мужской</b><span>Арам</span></span></button>
     </div>
+    <label class="field">Номер звонящего (демо). На настоящей линии он определяется сам.
+      <input class="input" id="caller" type="tel" inputmode="tel" placeholder="+374 99 12 34 56">
+    </label>
     <button class="btn btn-accent" id="start">Позвонить</button>
     <button class="btn btn-end" id="stop" hidden>Завершить</button>
     <div id="state"></div>
@@ -215,7 +218,9 @@
       $("state").textContent = "Подключаю…";
       actx = new AudioContext(); // created on the tap so iPhone allows sound
       try {
-        const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}`, { method: "POST" })).json();
+        const caller = $("caller").value.trim();
+        try { localStorage.setItem("bvCaller", caller); } catch {}
+        const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}`, { method: "POST" })).json();
         if (!sess.key) throw new Error(sess.error || "no key");
         pc = new RTCPeerConnection();
         if (speech === "openai") {
@@ -284,6 +289,7 @@
       if (!$("state").textContent.startsWith("Не получилось")) $("state").textContent = "Звонок завершён";
     }
 
+    try { $("caller").value = localStorage.getItem("bvCaller") ?? ""; } catch {}
     $("start").addEventListener("click", start);
     $("stop").addEventListener("click", stop);
   </script>
