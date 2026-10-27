@@ -29,6 +29,19 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
   let stoppedAt = 0, agentEl = null, textBuf = "";
   let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0, playing = false;
   let callId = "", turn = 0, callStartedAt = 0, ended = false;
+  // One response at a time: asking for a new one while another runs is an error and made the assistant
+  // say extra lines («…դեռ ընթացքի մեջ է»), so requests wait for the current response to finish.
+  let responseActive = false, responseWanted = false;
+  const hasWords = (s) => /\p{L}/u.test(s ?? "");
+
+  function requestResponse() {
+    if (responseActive) {
+      responseWanted = true;
+      return;
+    }
+    responseActive = true;
+    dc?.send(JSON.stringify({ type: "response.create" }));
+  }
 
   function log(role, fields) {
     if (!callId) return;
@@ -59,13 +72,13 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     if (transcript) {
       dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.` }] } }));
     }
-    dc?.send(JSON.stringify({ type: "response.create" }));
+    requestResponse();
   }
 
   // The mic is muted while our own TTS plays, otherwise OpenAI would hear the assistant's voice as the caller.
   function setMic(on) {
     clearTimeout(unmuteTimer);
-    if (on) unmuteTimer = setTimeout(() => micTrack && (micTrack.enabled = true), 250);
+    if (on) unmuteTimer = setTimeout(() => micTrack && (micTrack.enabled = true), 400); // let the echo die down
     else if (micTrack) micTrack.enabled = false;
   }
 
@@ -125,25 +138,48 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
         ui.state("hearing");
         break;
       case "input_audio_buffer.speech_stopped":
-        // A new caller turn: stop whatever was still playing from the previous one
+        // Wait for the transcript before doing anything: noise and the assistant's own echo also end up here,
+        // and cutting the reply off on them made it start sentences over and over.
+        clearTimeout(pendingTurn);
+        pendingTurn = setTimeout(() => replyToTurn(null), 1500); // the transcript usually arrives in 0.3-0.8 s
+        stoppedAt = performance.now();
+        break;
+      case "conversation.item.input_audio_transcription.completed": {
+        const text = ev.transcript?.trim() ?? "";
+        if (ev.usage) usage({ kind: "transcribe", usage: ev.usage });
+        if (!hasWords(text)) {
+          // just noise: ignore it, don't interrupt or answer
+          clearTimeout(pendingTurn);
+          pendingTurn = null;
+          stoppedAt = 0;
+          log("event", { text: "ignored a phrase without words (noise/echo)" });
+          if (!playing) ui.state("listening");
+          break;
+        }
+        if (!pendingTurn) {
+          // late transcript: the reply already started from the audio alone — just show it
+          ui.add(text, "user");
+          log("user", { text });
+          break;
+        }
+        // A real new phrase: whatever was still playing from the previous turn is dropped
         // (OpenAI sometimes answers twice when it splits a long phrase).
         speakGen++;
         sources.forEach((s) => { try { s.stop(); } catch {} });
         sources = [];
         playEnd = 0;
         turn++;
-        clearTimeout(pendingTurn);
-        pendingTurn = setTimeout(() => replyToTurn(null), 1000); // the transcript usually arrives in 0.3-0.8 s
-        stoppedAt = performance.now();
         agentEl = null;
         ui.state("answering");
-        break;
-      case "conversation.item.input_audio_transcription.completed":
-        ui.add(ev.transcript?.trim() || "…", "user");
+        ui.add(text, "user");
         if (stoppedAt) usage({ kind: "transcript_delay", ms: Math.round(performance.now() - stoppedAt) });
-        replyToTurn(ev.transcript?.trim());
-        if (ev.usage) usage({ kind: "transcribe", usage: ev.usage });
-        log("user", { text: ev.transcript?.trim() ?? "" });
+        replyToTurn(text);
+        log("user", { text });
+        break;
+      }
+      case "response.created":
+        responseActive = true;
+        setMic(false); // muted as soon as the assistant starts answering, so it can't hear its own voice
         break;
       // OpenAI speaking itself (comparison mode)
       case "output_audio_buffer.started":
@@ -188,14 +224,20 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
         break;
       }
       case "response.done":
+        responseActive = false;
         if (ev.response?.usage) usage({ kind: "openai", usage: ev.response.usage });
         if (toolOutputs.length) {
           const outs = toolOutputs;
           toolOutputs = [];
           Promise.all(outs).then((items) => {
             for (const it of items) dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: it.call_id, output: it.output } }));
-            dc?.send(JSON.stringify({ type: "response.create" }));
+            requestResponse();
           });
+        } else if (responseWanted) {
+          responseWanted = false;
+          requestResponse();
+        } else if (!playing) {
+          setMic(true); // nothing to say (or it failed): don't leave the mic muted
         }
         break;
       case "error":
