@@ -52,7 +52,9 @@
     let stoppedAt = 0, agentEl = null, textBuf = "";
     let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0;
     // Every call is saved (text + the audio of each caller phrase) so recognition mistakes can be analysed.
-    let callId = "", turn = 0, recorder = null, playing = false;
+    let callId = "", turn = 0, recorder = null, playing = false, callStartedAt = 0;
+    // What each call consumed, for the cost per minute (scripts/cost-report.mjs).
+    const usage = (data) => log("usage", { text: JSON.stringify(data) });
     function log(role, fields) {
       const form = new FormData();
       form.append("call_id", callId);
@@ -101,6 +103,7 @@
       // Replies within one caller turn (e.g. «one moment» and then the confirmation) play one after another;
       // a reply left over from an earlier turn is dropped when the caller speaks again (see speech_stopped).
       const gen = speakGen;
+      usage({ kind: "tts", chars: text.length });
       const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
       if (!res.ok || !res.body) return add(`Ошибка голоса: ${res.status}`, "tool");
       setMic(false);
@@ -154,6 +157,7 @@
           break;
         case "conversation.item.input_audio_transcription.completed":
           add(ev.transcript?.trim() || "…", "user");
+          if (ev.usage) usage({ kind: "transcribe", usage: ev.usage });
           log("user", { text: ev.transcript?.trim() ?? "" });
           break;
         // OpenAI speaking itself
@@ -198,6 +202,7 @@
           break;
         }
         case "response.done":
+          if (ev.response?.usage) usage({ kind: "openai", usage: ev.response.usage });
           if (toolOutputs.length) {
             const outs = toolOutputs;
             toolOutputs = [];
@@ -259,6 +264,7 @@
         await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
         callId = crypto.randomUUID();
         turn = 0;
+        callStartedAt = Date.now();
         // our own copy of each caller phrase (same detector as /lab/), only for the log
         recorder = await createListener({
           onPhrase: (wav) => log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) }),
@@ -277,6 +283,8 @@
     }
 
     function stop() {
+      if (callStartedAt) usage({ kind: "call", seconds: Math.round((Date.now() - callStartedAt) / 1000), voice, speech });
+      callStartedAt = 0;
       pc?.close();
       recorder?.stop();
       recorder = null;

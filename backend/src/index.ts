@@ -509,7 +509,7 @@ async function realtimeLog(env: Env, req: Request): Promise<Response> {
   const callId = cleanText(form.get("call_id"), 64);
   const role = cleanText(form.get("role"), 16);
   const turn = Number(form.get("turn"));
-  if (!callId || !["user", "agent", "user_audio", "event"].includes(role) || !Number.isInteger(turn)) return json({ error: "bad_request" }, 400);
+  if (!callId || !["user", "agent", "user_audio", "event", "usage"].includes(role) || !Number.isInteger(turn)) return json({ error: "bad_request" }, 400);
   const file = form.get("audio");
   let audio: ArrayBuffer | null = null, audioType: string | null = null;
   if (file instanceof File) {
@@ -519,7 +519,7 @@ async function realtimeLog(env: Env, req: Request): Promise<Response> {
   }
   const latency = form.get("latency_ms") === null ? NaN : Number(form.get("latency_ms"));
   await env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(callId, turn, role, cleanText(form.get("text"), 1000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
+    .bind(callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
     .run();
   return json({ ok: true });
 }
