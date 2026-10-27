@@ -345,6 +345,25 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
 
 // ---------------------------------------------------------------- OpenAI Realtime test (/realtime/)
 
+// The realtime model writes clumsy Armenian (e.g. «մշակումի» instead of «մշակման») when it composes freely,
+// so it gets correct ready-made sentences for every step of a booking call and only fills in the details.
+const PHRASEBOOK = `PHRASEBOOK — use these sentences as written, only changing the day, time, service, price or name. Don't compose your own wording when one of these fits:
+- Ask what they need: «Ի՞նչ ծառայություն եք ցանկանում։»
+- Ask when: «Ո՞ր օրը և ո՞ր ժամին Ձեզ հարմար կլինի։»
+- Time is free: «Վաղը ժամը տասնմեկին ազատ է։ Գրանցե՞մ։»
+- Time is taken: «Ժամը տասնմեկը զբաղված է։ Կարող եմ առաջարկել տասնմեկն անց կեսը։»
+- Ask the name: «Ինչպե՞ս է Ձեր անունը։»
+- Ask the number: «Խնդրում եմ, ասեք Ձեր հեռախոսահամարը։»
+- Check the number: «Համարը վերջանում է ութսունութով, ճի՞շտ է։»
+- Booked: «Շատ լավ, Ձեզ գրանցեցի վաղը ժամը տասնմեկին։ Սպասում ենք Ձեզ։»
+- Price: «Մորուքի մշակումն արժե վեց հազար դրամ։» / «Կտրվածքն արժե տասը հազար դրամ։»
+- Duration: «Այն տևում է մոտ քառասունհինգ րոպե։»
+- Anything else: «Ուրիշ հարց ունե՞ք։»
+- Goodbye: «Շնորհակալություն զանգի համար։ Լավ օր Ձեզ։»
+- Didn't catch it: «Կներեք, չլսեցի, կկրկնե՞ք։»
+- Don't know: «Այդ մասին տեղեկություն չունեմ։»
+Grammar: «for <service>» uses the genitive: կտրվածքի, ֆեյդ կտրվածքի, մորուքի մշակման, սափրման, գլխի սափրման, երեխայի կտրվածքի, հարդարման, մազահեռացման, երանգավորման (nouns ending in -ում take -ման: մշակում → մշակման, never «մշակումի»). Before a vowel the article is «ն»: «մշակումն արժե», «կտրվածքն արժե».`;
+
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -363,7 +382,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters.",
     "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list.",
     "Understand (but never use yourself) the callers' slang: «թրաշս դզեմ», «թրաշ դզել», «մորուքս սարքեմ» = beard trim; «թրաշ անել», «սափրվել» = shave; «էգուց» = tomorrow; «էսօր» = today; «կարամ գամ» = can I come; «ֆեյդ» = fade; «մաշինկայով», «զրոյով» = buzz cut; «ախպեր ջան», «ապեր» = friendly address, not a name; «հա» = yes, «չէ» = no.",
-    "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տաս հազար դրամ».",
+    "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ».",
+    PHRASEBOOK,
     "Booking flow (this is a voice test without the calendar, so any requested time within opening hours is free): confirm the time in one sentence and ask «Գրանցե՞մ»; then ask the name; then ask which phone number to write and repeat its last two digits; then confirm the booking in one sentence. The caller's number is not visible in this test: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
     `Today: ${localNow().date}. Opening hours: ${hoursText}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
