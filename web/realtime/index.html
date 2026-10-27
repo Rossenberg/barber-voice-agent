@@ -37,13 +37,26 @@
     <div class="transcript" id="log"></div>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
   <script type="module">
+    import { createListener } from "/listener.js";
     const $ = (id) => document.getElementById(id);
     const DEBUG = new URLSearchParams(location.search).has("debug");
     let voice = "female", speech = "elevenlabs";
     let pc = null, stream = null, micTrack = null, actx = null;
     let stoppedAt = 0, agentEl = null, textBuf = "";
     let playEnd = 0, sources = [], unmuteTimer = null;
+    // Every call is saved (text + the audio of each caller phrase) so recognition mistakes can be analysed.
+    let callId = "", turn = 0, recorder = null, playing = false;
+    function log(role, fields) {
+      const form = new FormData();
+      form.append("call_id", callId);
+      form.append("turn", String(turn));
+      form.append("role", role);
+      for (const [k, v] of Object.entries(fields)) if (v !== undefined && v !== null) form.append(k, v);
+      fetch("/api/rt-log", { method: "POST", body: form }).catch(() => {});
+    }
 
     const pick = (sel, attr, set) => document.querySelectorAll(sel).forEach((b) => b.addEventListener("click", () => {
       set(b.dataset[attr]);
@@ -65,7 +78,9 @@
       if (!stoppedAt || !el || el.querySelector(".lat")) return;
       const lat = document.createElement("span");
       lat.className = "lat";
-      lat.textContent = `заговорил через ${((performance.now() - stoppedAt) / 1000).toFixed(1)} с`;
+      const ms = Math.round(performance.now() - stoppedAt);
+      lat.textContent = `заговорил через ${(ms / 1000).toFixed(1)} с`;
+      el.dataset.ms = String(ms);
       el.append(lat);
       stoppedAt = 0;
     }
@@ -82,6 +97,7 @@
       const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
       if (!res.ok || !res.body) return add(`Ошибка голоса: ${res.status}`, "tool");
       setMic(false);
+      playing = true;
       const reader = res.body.getReader();
       let rest = new Uint8Array(0), first = true;
       playEnd = Math.max(playEnd, actx.currentTime + 0.05);
@@ -106,7 +122,7 @@
         playEnd += buf.duration;
       }
       const left = Math.max(0, playEnd - actx.currentTime);
-      setTimeout(() => { if (actx && actx.currentTime >= playEnd - 0.01) { sources = []; setMic(true); $("state").textContent = "Слушаю"; } }, left * 1000 + 30);
+      setTimeout(() => { if (actx && actx.currentTime >= playEnd - 0.01) { sources = []; playing = false; setMic(true); $("state").textContent = "Слушаю"; } }, left * 1000 + 30);
     }
 
     function onEvent(e) {
@@ -117,12 +133,14 @@
           $("state").textContent = "Слышу тебя…";
           break;
         case "input_audio_buffer.speech_stopped":
+          turn++;
           stoppedAt = performance.now();
           agentEl = null;
           $("state").textContent = "Отвечает…";
           break;
         case "conversation.item.input_audio_transcription.completed":
           add(ev.transcript?.trim() || "…", "user");
+          log("user", { text: ev.transcript?.trim() ?? "" });
           break;
         // OpenAI speaking itself
         case "output_audio_buffer.started":
@@ -132,6 +150,7 @@
         case "response.output_audio_transcript.done":
           agentEl ??= add("", "agent");
           agentEl.prepend(ev.transcript ?? "");
+          log("agent", { text: ev.transcript ?? "", latency_ms: agentEl.dataset.ms });
           agentEl = null;
           $("state").textContent = "Слушаю";
           break;
@@ -144,7 +163,7 @@
           textBuf = "";
           if (!text) break;
           const el = add(text, "agent");
-          speak(text, el);
+          speak(text, el).then(() => log("agent", { text, latency_ms: el.dataset.ms }));
           break;
         }
         case "error":
@@ -187,6 +206,13 @@
         const res = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${sess.key}`, "content-type": "application/sdp" } });
         if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 200)}`);
         await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
+        callId = crypto.randomUUID();
+        turn = 0;
+        // our own copy of each caller phrase (same detector as /lab/), only for the log
+        recorder = await createListener({
+          onPhrase: (wav) => log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) }),
+          isPaused: () => playing,
+        }).catch((err) => (console.error("recorder", err), null));
         $("start").hidden = true;
         $("stop").hidden = false;
         $("state").textContent = "Соединено — говори";
@@ -201,6 +227,8 @@
 
     function stop() {
       pc?.close();
+      recorder?.stop();
+      recorder = null;
       stream?.getTracks().forEach((t) => t.stop());
       sources.forEach((s) => { try { s.stop(); } catch {} });
       actx?.close();

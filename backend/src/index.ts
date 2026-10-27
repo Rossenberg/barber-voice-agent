@@ -403,6 +403,27 @@ async function ttsStream(env: Env, req: Request): Promise<Response> {
   return new Response(res.body, { headers: { "content-type": "audio/pcm", "cache-control": "no-store" } });
 }
 
+/** Stores one /realtime/ event: a transcript line, an assistant reply, or the audio of a caller's phrase. */
+async function realtimeLog(env: Env, req: Request): Promise<Response> {
+  const form = await req.formData();
+  const callId = cleanText(form.get("call_id"), 64);
+  const role = cleanText(form.get("role"), 16);
+  const turn = Number(form.get("turn"));
+  if (!callId || !["user", "agent", "user_audio"].includes(role) || !Number.isInteger(turn)) return json({ error: "bad_request" }, 400);
+  const file = form.get("audio");
+  let audio: ArrayBuffer | null = null, audioType: string | null = null;
+  if (file instanceof File) {
+    if (file.size > 400_000) return json({ error: "audio_too_big" }, 400);
+    audio = await file.arrayBuffer();
+    audioType = file.type || "application/octet-stream";
+  }
+  const latency = form.get("latency_ms") === null ? NaN : Number(form.get("latency_ms"));
+  await env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(callId, turn, role, cleanText(form.get("text"), 1000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
+    .run();
+  return json({ ok: true });
+}
+
 // ---------------------------------------------------------------- dashboard
 
 function validSettings(input: Record<string, unknown>, current: Settings): Settings {
@@ -555,6 +576,11 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await realtimeSession(env, req);
+      }
+      if (path === "/api/rt-log" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await realtimeLog(env, req);
       }
       if (path === "/api/tts" && req.method === "POST") {
         const origin = req.headers.get("origin");
