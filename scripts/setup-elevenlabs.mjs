@@ -65,6 +65,7 @@ const TOOLS = [
     properties: {
       date: { type: "string", description: "Date in YYYY-MM-DD, Yerevan time. Work out 'today', 'tomorrow' (էգուց/վաղը) etc. from today's date." },
       time: { type: "string", description: "Optional requested start time, HH:MM 24h, e.g. 11:00 or 15:30." },
+      part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for the morning (before 12), afternoon (12-17) or evening (17+). Leave empty otherwise." },
       service_id: { type: "string", description: "Service id from the price list, e.g. haircut, fade_cut, beard_trim. Default haircut." },
     },
     required: ["date"],
@@ -170,7 +171,7 @@ async function ensureAgent() {
         language: "hy",
         dynamic_variables: { dynamic_variable_placeholders: PLACEHOLDERS },
         prompt: {
-          prompt: readFileSync(join(ROOT, "agent/system-prompt.md"), "utf8"),
+          prompt: `${readFileSync(join(ROOT, "agent/system-prompt.md"), "utf8")}\n\n${readFileSync(join(ROOT, "agent/phrasebook-hy.md"), "utf8")}`,
           llm: AGENT.llm,
           reasoning_effort: AGENT.reasoningEffort,
           temperature: 0.3,

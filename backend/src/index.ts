@@ -1,3 +1,4 @@
+import PHRASEBOOK from "../../agent/phrasebook-hy.md"; // shared with the ElevenLabs agent (scripts/setup-elevenlabs.mjs)
 import {
   addDays,
   checkToken,
@@ -116,6 +117,8 @@ async function freeStarts(db: D1Database, settings: Settings, date: string, dura
   return starts;
 }
 
+const PARTS_OF_DAY: Record<string, [number, number]> = { morning: [0, 12 * 60], afternoon: [12 * 60, 17 * 60], evening: [17 * 60, 24 * 60] };
+
 const nearest = (starts: number[], target: number, count = 3) =>
   [...starts].sort((a, b) => Math.abs(a - target) - Math.abs(b - target)).slice(0, count).sort((a, b) => a - b).map(toHHMM);
 
@@ -167,6 +170,19 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
       requested_time: toHHMM(requested),
       requested_time_free: free,
       ...(free ? {} : { nearest_free_times: nearest(starts, requested) }),
+      ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
+    };
+  }
+  // "Is there anything tomorrow morning?" — filter by part of day, and say what's free otherwise.
+  const part = typeof body.part_of_day === "string" ? PARTS_OF_DAY[body.part_of_day] : undefined;
+  if (part) {
+    const inPart = starts.filter((m) => m >= part[0] && m < part[1]);
+    return {
+      ...base,
+      open: true,
+      part_of_day: body.part_of_day,
+      free_times: spread(inPart, 4),
+      ...(inPart.length ? {} : { other_free_times_that_day: spread(starts, 3) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
     };
   }
@@ -345,24 +361,39 @@ async function transcribe(env: Env, req: Request): Promise<Response> {
 
 // ---------------------------------------------------------------- OpenAI Realtime test (/realtime/)
 
-// The realtime model writes clumsy Armenian (e.g. «մշակումի» instead of «մշակման») when it composes freely,
-// so it gets correct ready-made sentences for every step of a booking call and only fills in the details.
-const PHRASEBOOK = `PHRASEBOOK — use these sentences as written, only changing the day, time, service, price or name. Don't compose your own wording when one of these fits:
-- Ask what they need: «Ի՞նչ ծառայություն եք ցանկանում։»
-- Ask when: «Ո՞ր օրը և ո՞ր ժամին Ձեզ հարմար կլինի։»
-- Time is free: «Վաղը ժամը տասնմեկին ազատ է։ Գրանցե՞մ։»
-- Time is taken: «Ժամը տասնմեկը զբաղված է։ Կարող եմ առաջարկել տասնմեկն անց կեսը։»
-- Ask the name: «Ինչպե՞ս է Ձեր անունը։»
-- Ask the number: «Խնդրում եմ, ասեք Ձեր հեռախոսահամարը։»
-- Check the number: «Համարը վերջանում է ութսունութով, ճի՞շտ է։»
-- Booked: «Շատ լավ, Ձեզ գրանցեցի վաղը ժամը տասնմեկին։ Սպասում ենք Ձեզ։»
-- Price: «Մորուքի մշակումն արժե վեց հազար դրամ։» / «Կտրվածքն արժե տասը հազար դրամ։»
-- Duration: «Այն տևում է մոտ քառասունհինգ րոպե։»
-- Anything else: «Ուրիշ հարց ունե՞ք։»
-- Goodbye: «Շնորհակալություն զանգի համար։ Լավ օր Ձեզ։»
-- Didn't catch it: «Կներեք, չլսեցի, կկրկնե՞ք։»
-- Don't know: «Այդ մասին տեղեկություն չունեմ։»
-Grammar: «for <service>» uses the genitive: կտրվածքի, ֆեյդ կտրվածքի, մորուքի մշակման, սափրման, գլխի սափրման, երեխայի կտրվածքի, հարդարման, մազահեռացման, երանգավորման (nouns ending in -ում take -ման: մշակում → մշակման, never «մշակումի»). Before a vowel the article is «ն»: «մշակումն արժե», «կտրվածքն արժե».`;
+const REALTIME_TOOLS = [
+  {
+    type: "function",
+    name: "check_availability",
+    description: "Free times at the barbershop. Call before saying any time is free.",
+    parameters: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "YYYY-MM-DD, Yerevan time" },
+        time: { type: "string", description: "Requested start HH:MM (24h), if the caller named a time" },
+        part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for morning (before 12), afternoon (12-17) or evening (17+)" },
+        service_id: { type: "string", description: "Service id from the price list; default haircut" },
+      },
+      required: ["date"],
+    },
+  },
+  {
+    type: "function",
+    name: "create_booking",
+    description: "Book the caller after they agreed to a free time and gave name and phone.",
+    parameters: {
+      type: "object",
+      properties: {
+        service_id: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD" },
+        time: { type: "string", description: "HH:MM" },
+        client_name: { type: "string" },
+        phone: { type: "string" },
+      },
+      required: ["service_id", "date", "time"],
+    },
+  },
+];
 
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
@@ -384,8 +415,10 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     "Understand (but never use yourself) the callers' slang: «թրաշս դզեմ», «թրաշ դզել», «մորուքս սարքեմ» = beard trim; «թրաշ անել», «սափրվել» = shave; «էգուց» = tomorrow; «էսօր» = today; «կարամ գամ» = can I come; «ֆեյդ» = fade; «մաշինկայով», «զրոյով» = buzz cut; «ախպեր ջան», «ապեր» = friendly address, not a name; «հա» = yes, «չէ» = no.",
     "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ».",
     PHRASEBOOK,
-    "Booking flow (this is a voice test without the calendar, so any requested time within opening hours is free): confirm the time in one sentence and ask «Գրանցե՞մ»; then ask the name; then ask which phone number to write and repeat its last two digits; then confirm the booking in one sentence. The caller's number is not visible in this test: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
-    `Today: ${localNow().date}. Opening hours: ${hoursText}.`,
+    "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
+    "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments.",
+    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; ask the phone number and repeat its last two digits; then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times. The caller's number is not visible on this test page: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
+    `Today: ${localNow().date} (${weekdayName(localNow().date)}). Opening hours: ${hoursText}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
     settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
   ].filter(Boolean).join("\n");
@@ -398,6 +431,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         model: "gpt-realtime-2.1",
         instructions,
         ...(textOnly ? { output_modalities: ["text"] } : {}),
+        tools: REALTIME_TOOLS,
+        tool_choice: "auto",
         audio: {
           input: { transcription: { model: "gpt-transcribe", language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high" } },
           output: { voice },
@@ -600,6 +635,15 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await realtimeSession(env, req);
+      }
+      // Calendar for the /realtime/ assistant (its tool calls come from the browser, so no TOOL_SECRET here).
+      if (path === "/api/rt-tool" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        const { name, args } = (await req.json().catch(() => ({}))) as { name?: string; args?: Record<string, unknown> };
+        if (name === "check_availability") return json(await checkAvailability(env, args ?? {}));
+        if (name === "create_booking") return json(await createBooking(env, { ...(args ?? {}), conversation_id: "realtime" }));
+        return json({ error: "unknown_tool" }, 400);
       }
       if (path === "/api/rt-log" && req.method === "POST") {
         const origin = req.headers.get("origin");

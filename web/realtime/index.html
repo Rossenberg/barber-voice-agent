@@ -22,7 +22,7 @@
 <body>
   <main class="wrap">
     <h1>OpenAI Realtime</h1>
-    <p class="muted">OpenAI слышит тебя и сразу придумывает ответ, а произносит его армянский голос ElevenLabs. Можно переключить на голос самого OpenAI для сравнения. Календаря нет: любое время считается свободным. Послушай, как она говорит по-армянски и как быстро отвечает. Под каждым ответом видно, через сколько секунд после конца твоей фразы она заговорила.</p>
+    <p class="muted">OpenAI слышит тебя и сразу придумывает ответ, а произносит его армянский голос ElevenLabs. Ассистент проверяет настоящее расписание и записывает — записи видны в панели барбера. Под каждым ответом видно, через сколько секунд после конца твоей фразы она заговорила.</p>
     <div class="voices" role="group" aria-label="Speech">
       <button class="voice" data-speech="elevenlabs" aria-pressed="true"><span class="av">Հ</span><span><b>Армянский голос</b><span>OpenAI думает, ElevenLabs говорит</span></span></button>
       <button class="voice" data-speech="openai" aria-pressed="false"><span class="av">AI</span><span><b>Голос OpenAI</b><span>с акцентом, для сравнения</span></span></button>
@@ -44,7 +44,8 @@
     const $ = (id) => document.getElementById(id);
     const DEBUG = new URLSearchParams(location.search).has("debug");
     let voice = "female", speech = "elevenlabs";
-    let pc = null, stream = null, micTrack = null, actx = null;
+    let pc = null, stream = null, micTrack = null, actx = null, dc = null;
+    let toolOutputs = []; // calendar results waiting for the current response to finish
     let stoppedAt = 0, agentEl = null, textBuf = "";
     let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0;
     // Every call is saved (text + the audio of each caller phrase) so recognition mistakes can be analysed.
@@ -172,6 +173,33 @@
           speak(text, el).then(() => log("agent", { text, latency_ms: el.dataset.ms }));
           break;
         }
+        // the assistant checks the calendar or books
+        case "response.function_call_arguments.done": {
+          const pending = add(ev.name === "create_booking" ? "Записываю…" : "Смотрю расписание…", "tool");
+          let args = {};
+          try { args = JSON.parse(ev.arguments || "{}"); } catch {}
+          const ready = fetch("/api/rt-tool", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: ev.name, args }) })
+            .then((r) => r.json())
+            .catch(() => ({ error: "network" }))
+            .then((result) => {
+              pending.textContent = result.error ? "Ошибка календаря" : ev.name === "create_booking" ? (result.success ? "Записано ✓" : "Не удалось записать") : "Расписание проверено";
+              if (!result.error) pending.classList.add("ok");
+              log("event", { text: `${ev.name} ${JSON.stringify(args)} → ${JSON.stringify(result).slice(0, 600)}` });
+              return { call_id: ev.call_id, output: JSON.stringify(result) };
+            });
+          toolOutputs.push(ready);
+          break;
+        }
+        case "response.done":
+          if (toolOutputs.length) {
+            const outs = toolOutputs;
+            toolOutputs = [];
+            Promise.all(outs).then((items) => {
+              for (const it of items) dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: it.call_id, output: it.output } }));
+              dc?.send(JSON.stringify({ type: "response.create" }));
+            });
+          }
+          break;
         case "error":
           add(`Ошибка: ${ev.error?.message ?? "unknown"}`, "tool");
           break;
@@ -201,7 +229,7 @@
             log("event", { text: `connection ${st}` });
           }
         };
-        const dc = pc.createDataChannel("oai-events");
+        dc = pc.createDataChannel("oai-events");
         dc.onclose = () => log("event", { text: "data channel closed" });
         dc.onmessage = onEvent;
         // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
@@ -246,7 +274,7 @@
       stream?.getTracks().forEach((t) => t.stop());
       sources.forEach((s) => { try { s.stop(); } catch {} });
       actx?.close();
-      pc = null; stream = null; micTrack = null; actx = null; sources = []; playEnd = 0;
+      pc = null; stream = null; micTrack = null; actx = null; dc = null; sources = []; playEnd = 0; toolOutputs = [];
       $("start").hidden = false;
       $("stop").hidden = true;
       if (!$("state").textContent.startsWith("Не получилось")) $("state").textContent = "Звонок завершён";
