@@ -171,7 +171,17 @@
         pc.addTrack(micTrack);
         const dc = pc.createDataChannel("oai-events");
         dc.onmessage = onEvent;
-        dc.onopen = () => dc.send(JSON.stringify({ type: "response.create", response: { instructions: "Greet the caller in Armenian in one short sentence: the barbershop name and «Ինչո՞վ օգնեմ»." } }));
+        // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
+        const cfg = await (await fetch("/api/public/config", { cache: "no-store" })).json();
+        const greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
+        dc.onopen = () => {
+          if (speech === "elevenlabs") {
+            dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "assistant", content: [{ type: "output_text", text: greeting }] } }));
+            speak(greeting, add(greeting, "agent"));
+          } else {
+            dc.send(JSON.stringify({ type: "response.create", response: { instructions: `Say exactly this greeting, nothing else: «${greeting}»` } }));
+          }
+        };
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         const res = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${sess.key}`, "content-type": "application/sdp" } });
