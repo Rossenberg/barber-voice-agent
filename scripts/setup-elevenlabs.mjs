@@ -38,17 +38,18 @@ const AGENT = {
   // Words speech recognition should expect (barbershop slang).
   asrKeywords: ["թրաշ", "դզեմ", "ֆեյդ", "մեքենայով", "մորուք", "սափրում", "էգուց", "ախպեր", "կարամ", "կտրվածք", "ուկլադկա"],
   languages: {
-    en: { firstMessage: "Hi, this is {{shop_name}}. How can I help?" },
-    ru: { firstMessage: "Здравствуйте, {{shop_name}}. Чем помочь?" },
+    en: { firstMessage: "Hi, this is {{shop_name_latin}}. How can I help?" },
+    ru: { firstMessage: "Здравствуйте, {{shop_name_latin}}. Чем помочь?" },
   },
 };
 
 // Defaults so the agent also works from the ElevenLabs "Test AI agent" button.
 const PLACEHOLDERS = {
   assistant_name: VOICES.female.name,
-  shop_name: "Blade Barbershop",
+  shop_name: "Բլեյդ Բարբերշոփ",
+  shop_name_latin: "Blade Barbershop",
   address: "Երևան, Կենտրոն",
-  greeting: "Բարև ձեզ, Blade Barbershop, ես Անին եմ։ Ինչո՞վ օգնեմ։",
+  greeting: "Բարև ձեզ, Բլեյդ Բարբերշոփ, ես Անին եմ։ Ինչո՞վ օգնեմ։",
   today: "see system time",
   hours: "Monday–Saturday 10:00–21:00; Sunday 11:00–19:00",
   services: "- haircut | Կտրվածք | Haircut | 45 min | 10000 AMD",

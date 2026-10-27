@@ -359,11 +359,12 @@ function resetUi(key) {
 /** Everything the assistant needs to know, fresh from the dashboard. */
 function dynamicVariables() {
   const name = T[lang][`voice.${voice}`];
-  const shop = config.shop_name;
+  const shop = config.shop_name_spoken || config.shop_name; // Armenian letters, so it's said with an Armenian accent
   const today = `${config.today} (${WEEKDAYS[new Date(config.today + "T00:00:00Z").getUTCDay()]})`;
   return {
     assistant_name: name,
     shop_name: shop,
+    shop_name_latin: config.shop_name,
     address: config.address || "-",
     greeting: config.greeting.replaceAll("{shop}", shop).replaceAll("{name}", T.hy[`voice.${voice}`]),
     today,

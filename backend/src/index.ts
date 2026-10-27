@@ -30,6 +30,7 @@ interface Env {
 interface Settings {
   enabled: boolean;
   shop_name: string;
+  shop_name_spoken?: string; // the name in Armenian letters, so the voice doesn't say it with an English accent
   address: string;
   greeting: string; // {shop} and {name} are filled in by the landing page
   barbers: number; // how many clients can be served at the same time
@@ -355,10 +356,11 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
   const name = voice === "cedar" ? "Արամ" : "Անի";
   const instructions = [
-    `Your name is ${name}. You answer the phone for the barbershop called exactly «${settings.shop_name}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`,
+    `Your name is ${name}. You answer the phone for the barbershop called exactly «${settings.shop_name_spoken || settings.shop_name}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`,
     "The page has already greeted the caller, so don't greet again; answer what they say.",
     "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
     "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
+    "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters.",
     "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list.",
     "Understand (but never use yourself) the callers' slang: «թրաշս դզեմ», «թրաշ դզել», «մորուքս սարքեմ» = beard trim; «թրաշ անել», «սափրվել» = shave; «էգուց» = tomorrow; «էսօր» = today; «կարամ գամ» = can I come; «ֆեյդ» = fade; «մաշինկայով», «զրոյով» = buzz cut; «ախպեր ջան», «ապեր» = friendly address, not a name; «հա» = yes, «չէ» = no.",
     "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տաս հազար դրամ».",
@@ -430,6 +432,7 @@ function validSettings(input: Record<string, unknown>, current: Settings): Setti
   const s = { ...current };
   if ("enabled" in input) s.enabled = input.enabled === true;
   if ("shop_name" in input) s.shop_name = cleanText(input.shop_name, 60) || current.shop_name;
+  if ("shop_name_spoken" in input) s.shop_name_spoken = cleanText(input.shop_name_spoken, 60);
   if ("address" in input) s.address = cleanText(input.address, 120);
   if ("greeting" in input) s.greeting = cleanText(input.greeting, 200) || current.greeting;
   if ("extra_instructions" in input) s.extra_instructions = cleanText(input.extra_instructions, 1500);
@@ -556,6 +559,7 @@ export default {
         return json({
           enabled: settings.enabled,
           shop_name: settings.shop_name,
+          shop_name_spoken: settings.shop_name_spoken || settings.shop_name,
           address: settings.address,
           greeting: settings.greeting,
           extra_instructions: settings.extra_instructions,

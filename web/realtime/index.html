@@ -192,7 +192,7 @@
         dc.onmessage = onEvent;
         // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
         const cfg = await (await fetch("/api/public/config", { cache: "no-store" })).json();
-        const greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
+        const greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
         dc.onopen = () => {
           if (speech === "elevenlabs") {
             dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "assistant", content: [{ type: "output_text", text: greeting }] } }));
