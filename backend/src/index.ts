@@ -395,7 +395,7 @@ async function ttsStream(env: Env, req: Request): Promise<Response> {
   const { text, voice } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string };
   const clean = cleanText(text, 500);
   if (!clean) return json({ error: "no_text" }, 400);
-  const voiceId = voice === "male" ? "JBFqnCBsd6RMkjVDRZzb" : "cgSgspJ2msm6clMCkdW9"; // George / Jessica, as on the agent
+  const voiceId = voice === "male" ? "JBFqnCBsd6RMkjVDRZzb" : "Xb7hH8MSUJpSbSDYk0k2"; // George / Alice, as on the agent
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000`, {
     method: "POST",
     headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "content-type": "application/json" },

@@ -20,7 +20,7 @@ const SITE_HOSTS = ["barber-voice-agent.gasparyaninvest.workers.dev", "localhost
 const API = "https://api.elevenlabs.io";
 
 const VOICES = {
-  female: { id: "cgSgspJ2msm6clMCkdW9", name: "Անի" }, // Jessica
+  female: { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Անի" }, // Alice (native speaker picked it over Jessica, Sarah, Matilda, Lily, Bella)
   male: { id: "JBFqnCBsd6RMkjVDRZzb", name: "Արամ" }, // George
 };
 
