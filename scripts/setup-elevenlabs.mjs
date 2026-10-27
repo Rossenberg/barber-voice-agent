@@ -46,10 +46,10 @@ const AGENT = {
 // Defaults so the agent also works from the ElevenLabs "Test AI agent" button.
 const PLACEHOLDERS = {
   assistant_name: VOICES.female.name,
-  shop_name: "Բլեյդ Բարբերշոփ",
+  shop_name: "Բլեյդ բարբեր շոփ",
   shop_name_latin: "Blade Barbershop",
   address: "Երևան, Կենտրոն",
-  greeting: "Բարև ձեզ, Բլեյդ Բարբերշոփ, ես Անին եմ։ Ինչո՞վ օգնեմ։",
+  greeting: "Բարև ձեզ, Բլեյդ բարբեր շոփ, ես Անին եմ։ Ինչո՞վ օգնեմ։",
   today: "see system time",
   hours: "Monday–Saturday 10:00–21:00; Sunday 11:00–19:00",
   services: "- haircut | Կտրվածք | Haircut | 45 min | 10000 AMD",
