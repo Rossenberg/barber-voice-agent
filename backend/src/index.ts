@@ -441,6 +441,9 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const textOnly = params.get("speech") === "elevenlabs";
   // Caller ID: on a real phone line it comes from the call; the test page lets you type one in.
   const callerPhone = normalizePhone(params.get("caller"));
+  // medium: a bit smarter than the default in our tests (repeats the caller's framing, waits for a time
+  // to be chosen before booking) at about the same speed and <0.5¢ more per call; high was only slower.
+  const effort = ["minimal", "low", "medium", "high"].includes(params.get("effort") ?? "") ? params.get("effort")! : "medium";
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
@@ -475,6 +478,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         model: "gpt-realtime-2.1",
         instructions,
         ...(textOnly ? { output_modalities: ["text"] } : {}),
+        reasoning: { effort },
         tools: REALTIME_TOOLS,
         tool_choice: "auto",
         audio: {
