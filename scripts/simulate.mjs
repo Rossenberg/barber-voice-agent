@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = Object.fromEntries(readFileSync(join(ROOT, "backend/.env"), "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]));
 const { agent_id } = JSON.parse(readFileSync(join(ROOT, "agent/elevenlabs.json"), "utf8"));
-const SITE = "https://barber-voice-agent.gasparyaninvest.workers.dev";
+const SITE = "https://barber-voice-agent.weboostai.workers.dev";
 
 const SCENARIOS = [
   {

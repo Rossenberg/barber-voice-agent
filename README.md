@@ -1,6 +1,6 @@
 # BarberVoice — Armenian voice assistant for barbershops
 
-Landing page with a live voice demo + barber dashboard. Live: https://barber-voice-agent.gasparyaninvest.workers.dev (dashboard at `/dashboard/`).
+Landing page with a live voice demo + barber dashboard. Live: https://barber-voice-agent.weboostai.workers.dev (dashboard at `/dashboard/`).
 
 - **Voice:** ElevenLabs Agents — Gemini 3.8 Flash, TTS `eleven_v4_turbo` (Jessica = Անի, George = Արամ), ASR Scribe Realtime (high) with slang keywords. Starts in Armenian, switches to English/Russian.
 - **Backend:** Cloudflare Worker + D1 (`backend/`). Serves `web/` and the API:
