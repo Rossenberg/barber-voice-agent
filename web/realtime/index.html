@@ -95,11 +95,9 @@
 
     /** Speaks a reply with ElevenLabs (streamed 24 kHz PCM, played as it arrives). */
     async function speak(text, el) {
-      // A newer reply replaces the one still playing (OpenAI sometimes answers twice when it splits a long phrase).
-      const gen = ++speakGen;
-      sources.forEach((s) => { try { s.stop(); } catch {} });
-      sources = [];
-      playEnd = 0;
+      // Replies within one caller turn (e.g. «one moment» and then the confirmation) play one after another;
+      // a reply left over from an earlier turn is dropped when the caller speaks again (see speech_stopped).
+      const gen = speakGen;
       const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
       if (!res.ok || !res.body) return add(`Ошибка голоса: ${res.status}`, "tool");
       setMic(false);
@@ -140,6 +138,12 @@
           $("state").textContent = "Слышу тебя…";
           break;
         case "input_audio_buffer.speech_stopped":
+          // A new caller turn: stop whatever was still playing from the previous one
+          // (OpenAI sometimes answers twice when it splits a long phrase).
+          speakGen++;
+          sources.forEach((s) => { try { s.stop(); } catch {} });
+          sources = [];
+          playEnd = 0;
           turn++;
           stoppedAt = performance.now();
           agentEl = null;

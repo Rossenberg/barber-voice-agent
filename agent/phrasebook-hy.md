@@ -75,8 +75,8 @@ Callers say times in many ways; all mean the same: «տասնմեկին», «11-
 
 ## 3. Checking — say this first, then check the calendar
 
-- «Մեկ րոպե, հիմա կնայեմ։»
-- «Հիմա կստուգեմ։»
+- Before checking free time: «Մեկ րոպե, հիմա կնայեմ։»
+- Before booking: «Մեկ րոպե, գրանցում եմ։»
 
 ## 4. Answers about free time (only after checking the calendar)
 
