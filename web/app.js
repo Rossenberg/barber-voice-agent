@@ -1,8 +1,6 @@
-import { Conversation } from "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.26.0/+esm";
-import { createListener } from "/listener.js";
+import { startCall } from "/realtime-call.js";
 
 const MAX_CALL_SEC = 240; // matches the agent's max_duration_seconds
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const T = {
   hy: {
@@ -35,6 +33,7 @@ const T = {
     "tool.check": ["Նայում է ազատ ժամերը…", "Ժամերը ստուգված են"],
     "tool.book": ["Գրանցում է…", "Գրանցված է ✓"],
     "tool.error": "Համակարգի սխալ",
+    "tool.failed": "Չհաջողվեց գրանցել",
     "try.title": "Փորձեք ասել",
     "caller.summary": "Զանգողի համարը (դեմո)",
     "caller.hint": "Իրական զանգի ժամանակ համարը որոշվում է ավտոմատ, և ասիստենտը հարցնում է՝ պահե՞լ այն։",
@@ -93,6 +92,7 @@ const T = {
     "tool.check": ["Смотрит свободное время…", "Время проверено"],
     "tool.book": ["Записывает…", "Записано ✓"],
     "tool.error": "Ошибка системы",
+    "tool.failed": "Не удалось записать",
     "try.title": "Попробуйте сказать",
     "caller.summary": "Номер звонящего (демо)",
     "caller.hint": "В настоящем звонке номер определяется автоматически, и ассистент спрашивает, сохранить ли его.",
@@ -151,6 +151,7 @@ const T = {
     "tool.check": ["Checking free times…", "Times checked"],
     "tool.book": ["Booking…", "Booked ✓"],
     "tool.error": "System error",
+    "tool.failed": "Couldn’t book",
     "try.title": "Try saying",
     "caller.summary": "Caller’s number (demo)",
     "caller.hint": "On a real call the number is detected automatically, and the assistant asks whether to save it.",
@@ -184,7 +185,6 @@ const T = {
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status"), orb = $("orb"), label = $("label"), transcript = $("transcript");
 const startBtn = $("startBtn"), endBtn = $("endBtn"), fab = $("fab");
-const VOICES = window.BARBER_VOICE?.voices ?? {};
 
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -194,11 +194,9 @@ const store = {
 let lang = T[store.get("bvLang")] ? store.get("bvLang") : "hy";
 let voice = store.get("bvVoice") === "male" ? "male" : "female";
 let config = null; // from /api/public/config
-let conversation = null;
+let conversation = null; // the running call (realtime-call.js)
 let connecting = false;
 let timerId = null, rafId = null;
-let listener = null; // our own speech recognition (see listener.js)
-let agentSpeaking = false, resumeAt = 0, sttChain = Promise.resolve();
 let labelKey = "label.idle";
 
 const t = (key) => T[lang][key] ?? T.hy[key] ?? key;
@@ -300,6 +298,7 @@ function startTimer() {
   const tick = () => {
     const left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
     setStatus("live", `${t("status.live")} · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`);
+    if (!left) stopCall(); // demo calls are capped so a forgotten tab doesn't burn minutes
   };
   tick();
   timerId = setInterval(tick, 1000);
@@ -307,50 +306,8 @@ function startTimer() {
 
 function animateOrb() {
   if (!conversation) return;
-  const level = Math.min(1, Math.max((conversation.getOutputVolume?.() ?? 0) * 2.2, (listener?.state.level ?? 0) * 0.8));
-  orb.style.setProperty("--level", level.toFixed(3));
+  orb.style.setProperty("--level", conversation.level().toFixed(3));
   rafId = requestAnimationFrame(animateOrb);
-}
-
-/** Starts a Gemini transcription of a phrase. */
-function requestTranscript(wav) {
-  const text = fetch("/api/stt", { method: "POST", headers: { "content-type": "audio/wav" }, body: wav })
-    .then((res) => res.json())
-    .then((data) => data.text || "")
-    .catch((err) => (console.error(err), ""));
-  return { text };
-}
-
-/** Shows the caller's words and hands them to the agent (phrases stay in order). */
-async function deliver(request) {
-  const bubble = addMessage("…", "user pending");
-  setLabel("label.hearing");
-  const text = await request.text;
-  if (!text || !conversation) {
-    bubble.remove();
-    if (conversation) setLabel("label.notHeard");
-    return;
-  }
-  bubble.textContent = text;
-  bubble.classList.remove("pending");
-  conversation.sendUserMessage(text);
-}
-
-async function startListening() {
-  try {
-    conversation.setMicMuted(true); // the agent gets our transcripts instead of its own recognition
-    listener = await createListener({
-      onStart: () => conversation?.sendUserActivity(),
-      onPhrase: (wav) => {
-        const request = requestTranscript(wav);
-        sttChain = sttChain.then(() => deliver(request));
-      },
-      isPaused: () => agentSpeaking || Date.now() < resumeAt,
-    });
-  } catch (err) {
-    console.error("own recognition unavailable, falling back to the agent's", err);
-    conversation?.setMicMuted(false);
-  }
 }
 
 function resetUi(key) {
@@ -363,106 +320,63 @@ function resetUi(key) {
   setInCall(false);
 }
 
-/** Everything the assistant needs to know, fresh from the dashboard. */
-function dynamicVariables() {
-  const name = T[lang][`voice.${voice}`];
-  const shop = config.shop_name_spoken || config.shop_name; // Armenian letters, so it's said with an Armenian accent
-  const today = `${config.today} (${WEEKDAYS[new Date(config.today + "T00:00:00Z").getUTCDay()]})`;
-  return {
-    assistant_name: name,
-    shop_name: shop,
-    shop_name_latin: config.shop_name,
-    address: config.address || "-",
-    greeting: config.greeting.replaceAll("{shop}", shop).replaceAll("{name}", T.hy[`voice.${voice}`]),
-    today,
-    hours: config.hours_text,
-    services: config.services_text,
-    extra_instructions: config.extra_instructions || "-",
-    caller_phone: $("callerPhone").value.trim() || "unknown",
-  };
+function stopCall(key = "label.ended") {
+  conversation?.stop();
+  conversation = null;
+  resetUi(key);
 }
+
+// Texts the shared call module asks for.
+const callText = (key) =>
+  ({
+    "tool.check": t("tool.check")[0],
+    "tool.checked": t("tool.check")[1],
+    "tool.book": t("tool.book")[0],
+    "tool.booked": t("tool.book")[1],
+    "tool.failed": t("tool.failed"),
+    "tool.error": t("tool.error"),
+    "voice.error": t("label.error"),
+  })[key] ?? key;
+
+const CALL_STATES = { connected: "label.connected", hearing: "label.listening", answering: "label.hearing", listening: "label.listening", unstable: "label.error", failed: "label.error" };
 
 async function start() {
   if (conversation || connecting) return;
   await loadConfig(); // pick up the barber's latest prices / on-off switch
   if (!config) return setLabel("label.error");
   if (!config.enabled) return setLabel("label.disabled");
-  const agentId = window.BARBER_VOICE?.agentId;
-  if (!agentId) return setLabel("label.error");
 
   connecting = true;
   setStatus("busy");
   setLabel("label.mic");
   setInCall(true);
-
-  try {
-    // Ask for the mic first so we can show a clear message if it's blocked.
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach((tr) => tr.stop());
-  } catch {
-    connecting = false;
-    resetUi("label.micBlocked");
-    return;
-  }
-
   transcript.replaceChildren();
-  agentSpeaking = false;
-  const pendingTools = {};
-  const toolLabel = (name) => ({ check_availability: t("tool.check"), create_booking: t("tool.book") })[name];
 
   try {
-    conversation = await Conversation.startSession({
-      agentId,
-      connectionType: "webrtc",
-      overrides: { tts: { voiceId: VOICES[voice]?.id }, ...(lang !== "hy" ? { agent: { language: lang } } : {}) },
-      dynamicVariables: dynamicVariables(),
-      onConnect: () => {
-        startTimer();
-        setLabel("label.connected");
-        animateOrb();
+    // OpenAI Realtime hears and thinks, ElevenLabs speaks Armenian (see realtime-call.js)
+    conversation = await startCall(
+      { voice, caller: $("callerPhone").value.trim() },
+      {
+        add: addMessage,
+        t: callText,
+        state: (s) => {
+          setLabel(CALL_STATES[s] ?? "label.listening");
+          if (s === "failed") stopCall("label.error");
+        },
+        speaking: (on) => {
+          orb.dataset.mode = on ? "speaking" : "listening";
+          if (on) setLabel("label.speaking");
+        },
       },
-      onDisconnect: () => {
-        conversation = null;
-        listener?.stop();
-        listener = null;
-        resetUi("label.ended");
-      },
-      onError: (message) => {
-        console.error(message);
-        setLabel(/quota|credits/i.test(String(message)) ? "label.quota" : "label.error");
-      },
-      onModeChange: ({ mode }) => {
-        orb.dataset.mode = mode === "speaking" ? "speaking" : "listening";
-        agentSpeaking = mode === "speaking";
-        if (!agentSpeaking) resumeAt = Date.now() + 300; // let the echo of the agent's voice die down
-        setLabel(mode === "speaking" ? "label.speaking" : "label.listening");
-      },
-      onMessage: ({ message, role, source }) => {
-        const who = role ?? (source === "ai" ? "agent" : "user");
-        if (who === "user") return; // we already show our own transcript
-        // Strip expressive voice tags like "[happy]" that the TTS model uses.
-        const text = message?.replace(/\[[a-z ]{2,20}\]\s*/gi, "").trim();
-        if (text) addMessage(text, "agent");
-      },
-      onAgentToolRequest: (req) => {
-        const labels = toolLabel(req?.tool_name);
-        if (labels) pendingTools[req.tool_call_id ?? req.tool_name] = addMessage(labels[0], "tool");
-      },
-      onAgentToolResponse: (res) => {
-        const labels = toolLabel(res?.tool_name);
-        if (!labels) return;
-        const key = res.tool_call_id ?? res.tool_name;
-        const el = pendingTools[key] ?? addMessage("", "tool");
-        el.textContent = res.is_error ? t("tool.error") : labels[1];
-        if (!res.is_error) el.classList.add("ok");
-        delete pendingTools[key];
-      },
-    });
-    await startListening();
+    );
+    orb.dataset.mode = "listening";
+    startTimer();
+    animateOrb();
   } catch (err) {
     console.error(err);
     conversation = null;
-    resetUi(/quota|credits/i.test(String(err?.message ?? err)) ? "label.quota" : "label.error");
+    const msg = String(err?.message ?? err);
+    resetUi(/Permission|NotAllowed|getUserMedia/i.test(msg) ? "label.micBlocked" : msg === "disabled" ? "label.disabled" : /quota|credits/i.test(msg) ? "label.quota" : "label.error");
   } finally {
     connecting = false;
   }
@@ -539,7 +453,7 @@ document.querySelectorAll(".modes button").forEach((b) =>
 );
 
 startBtn.addEventListener("click", start);
-endBtn.addEventListener("click", () => conversation?.endSession());
+endBtn.addEventListener("click", () => stopCall());
 document.querySelectorAll("[data-start]").forEach((el) =>
   el.addEventListener("click", () => {
     $("assistant").scrollIntoView({ behavior: "smooth", block: "center" });
