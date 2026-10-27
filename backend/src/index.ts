@@ -117,6 +117,20 @@ async function freeStarts(db: D1Database, settings: Settings, date: string, dura
   return starts;
 }
 
+// Times in words, exactly as the phrasebook says them, so the assistant reads them instead of composing
+// (it got 13:30 wrong as «տասներկուսն անց կեսին» when it had to convert digits itself).
+const HOUR_AT = ["", "մեկին", "երկուսին", "երեքին", "չորսին", "հինգին", "վեցին", "յոթին", "ութին", "իննին", "տասին", "տասնմեկին", "տասներկուսին"];
+const HOUR_PAST = ["", "մեկն", "երկուսն", "երեքն", "չորսն", "հինգն", "վեցն", "յոթն", "ութն", "ինն", "տասն", "տասնմեկն", "տասներկուսն"];
+const MINUTES_AT: Record<number, string> = { 15: "տասնհինգին", 30: "կեսին", 45: "քառասունհինգին" };
+
+function timeHy(min: number): string {
+  const h12 = Math.floor(min / 60) % 12 || 12;
+  const m = min % 60;
+  if (m === 0) return `ժամը ${HOUR_AT[h12]}`;
+  return `${HOUR_PAST[h12]} անց ${MINUTES_AT[m] ?? `${m} րոպեին`}`;
+}
+const hy = (times: string[]) => times.map((t) => timeHy(parseHHMM(t)!));
+
 const PARTS_OF_DAY: Record<string, [number, number]> = { morning: [0, 12 * 60], afternoon: [12 * 60, 17 * 60], evening: [17 * 60, 24 * 60] };
 
 const nearest = (starts: number[], target: number, count = 3) =>
@@ -130,11 +144,14 @@ function spread(starts: number[], max = 6): string[] {
 }
 
 async function nextOpenDays(db: D1Database, settings: Settings, date: string, durationMin: number, count = 2) {
-  const out: { date: string; weekday: string; times: string[] }[] = [];
+  const out: { date: string; weekday: string; times: string[]; times_hy: string[] }[] = [];
   for (let i = 1; i <= 14 && out.length < count; i++) {
     const d = addDays(date, i);
     const starts = await freeStarts(db, settings, d, durationMin);
-    if (starts.length) out.push({ date: d, weekday: weekdayName(d), times: spread(starts, 3) });
+    if (starts.length) {
+      const times = spread(starts, 3);
+      out.push({ date: d, weekday: weekdayName(d), times, times_hy: hy(times) });
+    }
   }
   return out;
 }
@@ -163,13 +180,30 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
   const starts = await freeStarts(env.DB, settings, date, service.duration_min);
   const requested = parseHHMM(body.time);
   if (requested !== null) {
+    // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
+    if (date === localNow().date && requested <= localNow().minutes) {
+      const tomorrow = addDays(date, 1);
+      const tStarts = await freeStarts(env.DB, settings, tomorrow, service.duration_min);
+      const tFree = tStarts.includes(requested);
+      const tNear = tFree ? [] : nearest(tStarts, requested);
+      return {
+        ...base,
+        open: true,
+        requested_time: toHHMM(requested),
+        requested_time_hy: timeHy(requested),
+        requested_time_passed: true,
+        same_time_tomorrow: { date: tomorrow, weekday: weekdayName(tomorrow), free: tFree, ...(tFree ? {} : { nearest_free_times: tNear, nearest_free_times_hy: hy(tNear) }) },
+      };
+    }
     const free = starts.includes(requested);
+    const near = free ? [] : nearest(starts, requested);
     return {
       ...base,
       open: true,
       requested_time: toHHMM(requested),
+      requested_time_hy: timeHy(requested),
       requested_time_free: free,
-      ...(free ? {} : { nearest_free_times: nearest(starts, requested) }),
+      ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
     };
   }
@@ -182,7 +216,8 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
       open: true,
       part_of_day: body.part_of_day,
       free_times: spread(inPart, 4),
-      ...(inPart.length ? {} : { other_free_times_that_day: spread(starts, 3) }),
+      free_times_hy: hy(spread(inPart, 4)),
+      ...(inPart.length ? {} : { other_free_times_that_day: spread(starts, 3), other_free_times_that_day_hy: hy(spread(starts, 3)) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
     };
   }
@@ -190,6 +225,7 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
     ...base,
     open: true,
     free_times: spread(starts),
+    free_times_hy: hy(spread(starts)),
     ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
   };
 }
@@ -214,7 +250,8 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
 
   const starts = await freeStarts(env.DB, settings, date, service.duration_min);
   if (!starts.includes(start)) {
-    return { success: false, error: "slot_taken", message: "This time is not free any more.", nearest_free_times: nearest(starts, start) };
+    const near = nearest(starts, start);
+    return { success: false, error: "slot_taken", message: "This time is not free any more.", nearest_free_times: near, nearest_free_times_hy: hy(near) };
   }
   const phone = normalizePhone(body.phone);
   const bookingId = await insertBooking(env, service, date, start, {
@@ -417,6 +454,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
     PHRASEBOOK,
     "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
     "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments.",
+    "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
     "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; ask the phone number and repeat its last two digits; then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times. The caller's number is not visible on this test page: if they say «this number» / «the one I'm calling from», politely ask them to dictate it.",
     `Today: ${localNow().date} (${weekdayName(localNow().date)}). Opening hours: ${hoursText}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
