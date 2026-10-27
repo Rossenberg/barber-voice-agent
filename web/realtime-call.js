@@ -198,7 +198,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
         textBuf += ev.delta ?? "";
         break;
       case "response.output_text.done": {
-        const text = (ev.text ?? textBuf).trim();
+        const text = (ev.text ?? textBuf).replace(/[‹›]/g, "").trim(); // phrasebook slot marks, never meant to be said
         textBuf = "";
         if (!text) break;
         const el = ui.add(text, "agent");

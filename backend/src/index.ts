@@ -247,12 +247,16 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
     }
     const free = starts.includes(requested);
     const near = free ? [] : nearest(starts, requested);
+    // «at 9» when we open at 10 is not "taken" — say it's outside opening hours
+    const [openMin, closeMin] = settings.hours[weekdayOf(date)]!;
+    const outside = requested < openMin || requested + service.duration_min > closeMin;
     return {
       ...base,
       open: true,
       requested_time: toHHMM(requested),
       requested_time_hy: timeHy(requested),
       requested_time_free: free,
+      ...(outside ? { outside_opening_hours: true, opening_hours_that_day: `${toHHMM(openMin)}–${toHHMM(closeMin)}`, opens_hy: timeHy(openMin), closes_hy: timeHy(closeMin) } : {}),
       ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
     };
@@ -511,13 +515,15 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
       ? "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ»."
       : "In the chat write times and prices in digits, they're easier to read: «վաղը ժամը 11:30-ին», «10 000 դրամ». Otherwise follow the phrasebook's wording.",
     PHRASEBOOK,
-    "If the caller asks about free time without naming a service, don't ask about the service first: check right away with haircut, and ask the service later only if it matters.",
+    "If the caller asks about free time without naming a service, check right away with haircut (one service = 30 minutes), and in the SAME reply ask what they want: «Վաղը ժամը երեքին ազատ է։ Ի՞նչ ծառայություն եք ցանկանում՝ կտրվածք, մորուքի մշակում, թե՞ երկուսը միասին։» If it turns out to be two services (1 hour), check that time again for both. NEVER call create_booking for a service the caller didn't name — no default service when booking.",
     voice
       ? "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments."
       : "In the chat don't write «Մեկ րոպե, հիմա կնայեմ» — just check the calendar and answer.",
     voice
       ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
+    "Never start a sentence with «Խնդրում եմ».",
+    "If the calendar result says outside_opening_hours, never say the time is taken («զբաղված»): say when you open and close (opens_hy / closes_hy) and offer the free times — phrasebook line «Outside opening hours».",
     "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
     !voice
       ? "Phone: in the chat NEVER ask for a phone number — the chat already shows the customer's contact. Ignore the phone steps of the phrasebook: after the name, call create_booking right away without a phone."
@@ -661,7 +667,7 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
       }
       continue;
     }
-    const reply = (msg.content ?? "").trim();
+    const reply = (msg.content ?? "").replace(/[‹›]/g, "").trim(); // phrasebook slot marks
     await logLine("user", history[history.length - 1].content);
     await logLine("agent", reply, Date.now() - t0);
     return json({ id: chatId, reply, booked, model });
