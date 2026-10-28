@@ -99,12 +99,13 @@ function closedReason(settings: Settings, date: string): ClosedReason | null {
 
 /** Free start times (minutes since midnight) on a date for a service of the given length.
  * `people` > 1: a group coming together needs that many free chairs at the same time. */
-async function freeStarts(db: D1Database, settings: Settings, date: string, durationMin: number, people = 1): Promise<number[]> {
+/** ignoreBookingId: the caller's own booking they're changing, so its slot counts as free. */
+async function freeStarts(db: D1Database, settings: Settings, date: string, durationMin: number, people = 1, ignoreBookingId = 0): Promise<number[]> {
   if (closedReason(settings, date)) return [];
   const [open, close] = settings.hours[weekdayOf(date)]!;
   const { results } = await db
-    .prepare("SELECT start_min, end_min FROM bookings WHERE date = ? AND status = 'confirmed'")
-    .bind(date)
+    .prepare("SELECT start_min, end_min FROM bookings WHERE date = ? AND status = 'confirmed' AND id != ?")
+    .bind(date, ignoreBookingId)
     .all<{ start_min: number; end_min: number }>();
 
   const now = localNow();
@@ -227,7 +228,8 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
   const closed = closedReason(settings, date);
   if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, settings, date, service.duration_min) };
 
-  const starts = await freeStarts(env.DB, settings, date, service.duration_min, people);
+  const changing = Number(String(body.replace_booking_id ?? "").replace(/\D/g, "")) - 1000;
+  const starts = await freeStarts(env.DB, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
   const requested = afternoon(settings, date, parseHHMM(body.time));
   if (requested !== null) {
     // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
@@ -309,19 +311,36 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
   const start = isDate(date) ? afternoon(settings, date, parseHHMM(body.time)) : null;
   if (!isDate(date) || start === null) return { success: false, error: "bad_date_or_time", message: "Use YYYY-MM-DD and HH:MM." };
 
+  const phone = normalizePhone(body.phone);
+  const conversationId = cleanText(body.conversation_id, 80);
+
+  // Changing a booking made earlier (e.g. beard trim → haircut + beard): the old one is freed first, so
+  // its own slot counts as free, and put back if the new time doesn't fit. Only the caller's own booking:
+  // the same phone, or made in this same chat.
+  let replaced: number | null = null;
+  if (body.replace_booking_id) {
+    const oldId = Number(String(body.replace_booking_id).replace(/\D/g, "")) - 1000;
+    const old = await env.DB.prepare("SELECT id, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(oldId).first<{ id: number; phone: string | null; conversation_id: string | null }>();
+    if (!old) return { success: false, error: "booking_not_found", message: "No such booking: make a new one, or check the id." };
+    const own = (phone && old.phone === phone) || (conversationId?.startsWith("chat-") && old.conversation_id === conversationId);
+    if (!own) return { success: false, error: "not_your_booking", message: "Pass the same phone as the booking being changed." };
+    await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(old.id).run();
+    replaced = old.id;
+  }
+
   const starts = await freeStarts(env.DB, settings, date, service.duration_min);
   if (!starts.includes(start)) {
+    if (replaced) await env.DB.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").bind(replaced).run();
     const near = nearest(starts, start);
-    return { success: false, error: "slot_taken", message: "This time is not free any more.", nearest_free_times: near, nearest_free_times_hy: hy(near) };
+    return { success: false, error: "slot_taken", message: replaced ? "This time is not free; the old booking is kept." : "This time is not free any more.", nearest_free_times: near, nearest_free_times_hy: hy(near) };
   }
-  const phone = normalizePhone(body.phone);
   const bookingId = await insertBooking(env, service, date, start, {
     name: cleanText(body.client_name, 60),
     phone,
     source: "assistant",
-    conversationId: cleanText(body.conversation_id, 80),
+    conversationId,
   });
-  return { success: true, booking_id: bookingId, phone_saved: Boolean(phone), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}` };
+  return { success: true, booking_id: bookingId, ...(replaced ? { replaced_booking_id: `B-${1000 + replaced}` } : {}), phone_saved: Boolean(phone), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}` };
 }
 
 // ---------------------------------------------------------------- speech-to-text
@@ -472,6 +491,7 @@ const REALTIME_TOOLS = [
         part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for morning (before 12), afternoon (12-17) or evening (17+)" },
         service_id: { type: "string", description: "Service id from the price list; several for one person joined with + (e.g. haircut+beard_trim+styling). Default haircut." },
         people: { type: "integer", description: "How many people come at the same time (a group). Check with the longest person's services. Default 1." },
+        replace_booking_id: { type: "string", description: "When checking a change to a booking made earlier in this conversation: its booking_id, so its own slot counts as free." },
       },
       required: ["date"],
     },
@@ -479,7 +499,7 @@ const REALTIME_TOOLS = [
   {
     type: "function",
     name: "create_booking",
-    description: "Book one person after they agreed to a free time and gave name and phone. For a group, call once per person.",
+    description: "Book one person after they agreed to a free time and gave name and phone. For a group, call once per person. To change a booking made earlier in this conversation (add a service, other time), call again with replace_booking_id.",
     parameters: {
       type: "object",
       properties: {
@@ -488,6 +508,7 @@ const REALTIME_TOOLS = [
         time: { type: "string", description: "HH:MM" },
         client_name: { type: "string" },
         phone: { type: "string" },
+        replace_booking_id: { type: "string", description: "When the caller changes a booking made earlier (other service or time): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice. Use the same name and phone." },
       },
       required: ["service_id", "date", "time"],
     },
@@ -530,6 +551,7 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
       ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. The _hy words are only for Armenian: in a Russian or English conversation say times in that language (e.g. «в десять», «at ten»). If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
     "Never start a sentence with «Խնդրում եմ».",
+    "Once you booked someone in this conversation, any later change (add a service, another time) is a change of THAT booking: pass its booking_id as replace_booking_id to check_availability and to create_booking (same name and phone), so their own booking doesn't count as taken and they aren't booked twice. Do it yourself; don't send them to the administrator.",
     "If the calendar result says outside_opening_hours, never say the time is taken («զբաղված»): say when you open and close (opens_hy / closes_hy) and offer the free times — phrasebook line «Outside opening hours».",
     "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
     !voice
@@ -651,6 +673,12 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
   const model = CHAT_MODELS.includes(body.model ?? "") ? body.model! : CHAT_MODEL;
 
   const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
+  // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
+  // remind the model what it booked here, so a later change replaces that booking instead of failing.
+  const { results: made } = await env.DB.prepare("SELECT id, service_id, date, start_min, client_name FROM bookings WHERE conversation_id = ? AND status = 'confirmed'")
+    .bind(`chat-${chatId}`)
+    .all<{ id: number; service_id: string; date: string; start_min: number; client_name: string | null }>();
+  if (made.length) conv.splice(1, 0, { role: "system", content: `Bookings you made earlier in this chat: ${made.map((b) => `B-${1000 + b.id} ${b.service_id} ${b.date} ${toHHMM(b.start_min)} ${b.client_name ?? ""}`).join("; ")}.` });
   const tools = REALTIME_TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const logLine = (role: string, text: string, ms?: number) =>
     env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms) VALUES (?, ?, ?, ?, ?)").bind(`chat-${chatId}`, history.length, role, text.slice(0, 4000), ms ?? null).run();
