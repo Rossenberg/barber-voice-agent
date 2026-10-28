@@ -92,6 +92,8 @@ Full list for the opening hours — copy the words exactly, never build your own
 
 Afternoon and evening use the 12-hour number, the way people in Yerevan say it: 13:00 «ժամը մեկին», 15:30 «երեքն անց կեսին», 19:00 «ժամը յոթին». Add «ցերեկը» (12–17) or «երեկոյան» (17 and later) only when it could be confused with the morning: «երեկոյան ժամը յոթին».
 
+A bare hour from 1 to 9 means the afternoon/evening, never the night: «երեքին» = 15:00, «մեկին» = 13:00, «յոթին» = 19:00 (send 15:00, not 03:00, to the calendar). «տասին», «տասնմեկին», «տասներկուսին» are 10:00, 11:00, 12:00.
+
 Callers say times in many ways; all mean the same: «տասնմեկին», «11-ին», «մեկ ու կեսին» (13:30), «երեքից հետո» (after 15:00), «ճաշից հետո» (after ~14:00), «առավոտը» (before 12), «երեկոյան» (from 17), «ինչքան շուտ, այնքան լավ» (earliest possible).
 
 ## Days

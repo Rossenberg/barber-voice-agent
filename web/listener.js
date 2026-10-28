@@ -28,7 +28,7 @@ function toWav(samples) {
 export async function createListener({ onStart, onPhrase, isPaused, redemptionMs = 400, minSpeechMs = 250 }) {
   if (!window.vad?.MicVAD) throw new Error("vad-web is not loaded");
   const state = { level: 0 };
-  let startedWhilePaused = false;
+  let startedWhilePaused = false, inSpeech = false, resumedAt = 0;
   let maxProb = 0, maxLevel = 0, lastLog = Date.now();
 
   const mic = await window.vad.MicVAD.new({
@@ -46,6 +46,16 @@ export async function createListener({ onStart, onPhrase, isPaused, redemptionMs
       let sum = 0;
       for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
       state.level = Math.min(1, Math.sqrt(sum / frame.length) * 12);
+      // They started over the end of the assistant's reply (a quick «հա») and are still talking after it
+      // stopped: that's the caller, not its echo — take the phrase instead of dropping all of it.
+      if (inSpeech && startedWhilePaused && !isPaused()) {
+        resumedAt ||= Date.now();
+        if (Date.now() - resumedAt > 250 && probs.isSpeech > 0.5) {
+          startedWhilePaused = false;
+          if (DEBUG) console.log("VAD speech kept: went on after the assistant stopped");
+          onStart?.();
+        }
+      } else resumedAt = 0;
       if (DEBUG) {
         maxProb = Math.max(maxProb, probs.isSpeech);
         maxLevel = Math.max(maxLevel, state.level);
@@ -56,12 +66,17 @@ export async function createListener({ onStart, onPhrase, isPaused, redemptionMs
       }
     },
     onSpeechStart: () => {
+      inSpeech = true;
       startedWhilePaused = isPaused();
       if (DEBUG) console.log("VAD speech start", startedWhilePaused ? "(dropped: assistant talking)" : "");
       if (!startedWhilePaused) onStart?.();
     },
-    onVADMisfire: () => DEBUG && console.log("VAD misfire (too short)"),
+    onVADMisfire: () => {
+      inSpeech = false;
+      if (DEBUG) console.log("VAD misfire (too short)");
+    },
     onSpeechEnd: (audio) => {
+      inSpeech = false;
       if (DEBUG) console.log(`VAD speech end ${(audio.length / RATE).toFixed(1)}s`);
       if (startedWhilePaused || isPaused()) return;
       onPhrase(toWav(audio));

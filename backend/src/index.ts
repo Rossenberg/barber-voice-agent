@@ -228,7 +228,7 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
   if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, settings, date, service.duration_min) };
 
   const starts = await freeStarts(env.DB, settings, date, service.duration_min, people);
-  const requested = parseHHMM(body.time);
+  const requested = afternoon(settings, date, parseHHMM(body.time));
   if (requested !== null) {
     // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
     if (date === localNow().date && requested <= localNow().minutes) {
@@ -293,13 +293,20 @@ async function insertBooking(env: Env, service: Service, date: string, start: nu
   return `B-${1000 + res!.id}`;
 }
 
+/** «Երեքին» means 15:00 at a barbershop, not 03:00: an hour before opening that fits after noon is read as afternoon. */
+function afternoon(settings: Settings, date: string, min: number | null): number | null {
+  const hours = settings.hours[weekdayOf(date)];
+  if (min === null || !hours) return min;
+  return min < hours[0] && min < 12 * 60 && min + 12 * 60 < hours[1] ? min + 12 * 60 : min;
+}
+
 async function createBooking(env: Env, body: Record<string, unknown>) {
   const settings = await getSettings(env.DB);
   if (!settings.enabled) return DISABLED;
   const service = resolveServices(await getServices(env.DB, true), body.service_id);
   if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
   const date = body.date;
-  const start = parseHHMM(body.time);
+  const start = isDate(date) ? afternoon(settings, date, parseHHMM(body.time)) : null;
   if (!isDate(date) || start === null) return { success: false, error: "bad_date_or_time", message: "Use YYYY-MM-DD and HH:MM." };
 
   const starts = await freeStarts(env.DB, settings, date, service.duration_min);
@@ -537,6 +544,8 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
 }
 
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
+const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, ներկել, վաղը, ժամը։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
+
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
   const voice = params.get("voice") === "male" ? "cedar" : "marin";
@@ -550,6 +559,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   // "manual": the page's own Silero VAD ends each phrase and commits the audio (better in street noise,
   // and it catches a quick «հա»); otherwise OpenAI's semantic VAD does.
   const manualTurns = params.get("turn") === "manual";
+  const nr = params.get("nr"); // test switch: near | far (default off)
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const instructions = await assistantInstructions(env, { name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -568,9 +578,12 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
           // create_response off: the page first adds the text transcript of the phrase (the model alone
           // mis-heard «մազերս ներկեմ» as washing while gpt-transcribe got it right), then asks for the reply.
           input: {
-            transcription: { model: sttModel, language: "hy" },
-            // cleans traffic and street noise out of what the model and the recognizer hear (a phone held close)
-            noise_reduction: { type: "near_field" },
+            // Vocabulary hint: on real recordings with noise as loud as the voice it took phone numbers from
+            // ~3/9 right to 8/9, and it adds nothing on noise alone or on ordinary phrases.
+            transcription: { model: sttModel, language: "hy", prompt: TRANSCRIBE_HINT },
+            // OpenAI's noise reduction stays off: it cut the hissing «քս» of «քսանյոթ» (a real number in street
+            // noise + a passing car: 4/4 right without it, 1/4 with near_field or far_field). ?nr= to compare.
+            ...(nr === "near" || nr === "far" ? { noise_reduction: { type: `${nr}_field` } } : {}),
             turn_detection: manualTurns ? null : { type: "semantic_vad", eagerness: "high", create_response: false },
           },
           output: { voice },

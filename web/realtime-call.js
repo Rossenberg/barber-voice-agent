@@ -353,7 +353,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       }).catch((err) => (console.error("listener", err), null));
       manual = !!recorder;
     }
-    const extra = ["stt", "effort"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
+    const extra = ["stt", "effort", "nr"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
     const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
     if (!sess.key) throw new Error(sess.error || "no key");
     pc = new RTCPeerConnection();
