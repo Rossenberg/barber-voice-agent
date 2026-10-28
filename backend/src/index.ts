@@ -520,7 +520,7 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
       ? "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments."
       : "In the chat don't write «Մեկ րոպե, հիմա կնայեմ» — just check the calendar and answer.",
     voice
-      ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
+      ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. The _hy words are only for Armenian: in a Russian or English conversation say times in that language (e.g. «в десять», «at ten»). If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
     "Never start a sentence with «Խնդրում եմ».",
     "If the calendar result says outside_opening_hours, never say the time is taken («զբաղված»): say when you open and close (opens_hy / closes_hy) and offer the free times — phrasebook line «Outside opening hours».",
@@ -547,6 +547,9 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const callerPhone = normalizePhone(params.get("caller"));
   // Default effort: "medium" made real calls noticeably slower (2-6 s per reply) for little gain.
   const effort = ["minimal", "low", "medium", "high"].includes(params.get("effort") ?? "") ? params.get("effort")! : null;
+  // "manual": the page's own Silero VAD ends each phrase and commits the audio (better in street noise,
+  // and it catches a quick «հա»); otherwise OpenAI's semantic VAD does.
+  const manualTurns = params.get("turn") === "manual";
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const instructions = await assistantInstructions(env, { name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -564,7 +567,12 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
         audio: {
           // create_response off: the page first adds the text transcript of the phrase (the model alone
           // mis-heard «մազերս ներկեմ» as washing while gpt-transcribe got it right), then asks for the reply.
-          input: { transcription: { model: sttModel, language: "hy" }, turn_detection: { type: "semantic_vad", eagerness: "high", create_response: false } },
+          input: {
+            transcription: { model: sttModel, language: "hy" },
+            // cleans traffic and street noise out of what the model and the recognizer hear (a phone held close)
+            noise_reduction: { type: "near_field" },
+            turn_detection: manualTurns ? null : { type: "semantic_vad", eagerness: "high", create_response: false },
+          },
           output: { voice },
         },
       },

@@ -32,7 +32,13 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
   // One response at a time: asking for a new one while another runs is an error and made the assistant
   // say extra lines («…դեռ ընթացքի մեջ է»), so requests wait for the current response to finish.
   let responseActive = false, responseWanted = false;
+  // Our own Silero VAD decides when the caller's phrase ends ("manual" turns). OpenAI's VAD took traffic
+  // noise for speech and kept listening, and its mic pause after each reply swallowed a quick «հա».
+  // OpenAI's semantic VAD is only the fallback if Silero fails to load.
+  let manual = false, inPhrase = false, phraseTimer = null, holdTimer = null, micOn = true, lastAgentText = "";
+  let skipText = false, toolInResponse = false, owed = false; // a reply dropped because the caller kept talking
   const hasWords = (s) => /\p{L}/u.test(s ?? "");
+  const send = (obj) => dc?.readyState === "open" && dc.send(JSON.stringify(obj));
 
   function requestResponse() {
     if (responseActive) {
@@ -40,7 +46,54 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       return;
     }
     responseActive = true;
-    dc?.send(JSON.stringify({ type: "response.create" }));
+    owed = false;
+    send({ type: "response.create" });
+  }
+
+  // Silero heard the caller start talking.
+  function phraseStarted() {
+    if (!manual) return;
+    if (holdTimer) {
+      // a short pause and they went on (a number said in pieces): still the same phrase
+      clearTimeout(holdTimer);
+      holdTimer = null;
+      return;
+    }
+    inPhrase = true;
+    ui.state("hearing");
+    clearTimeout(phraseTimer);
+    phraseTimer = setTimeout(phraseEnded, 9000); // loud noise can keep the VAD "hearing" forever: answer what we have
+    // They went on talking before the reply was heard (e.g. a number dictated in pieces): drop that reply,
+    // both parts get one answer once they finish.
+    if (sources.length) return;
+    speakGen++;
+    if (responseActive && !toolInResponse) {
+      skipText = true;
+      owed = true;
+      send({ type: "response.cancel" });
+    }
+  }
+
+  // Silero heard a pause. Wait a little in case they go on: a phone number comes in pieces with pauses,
+  // and answering after the first piece cut the caller off (and short pieces are recognized badly).
+  function phrasePaused() {
+    if (!manual || !inPhrase) return;
+    clearTimeout(holdTimer);
+    const askedNumber = /համար|номер|number/i.test(lastAgentText);
+    holdTimer = setTimeout(phraseEnded, askedNumber ? 1000 : 250);
+  }
+
+  // The phrase is over: hand the audio to OpenAI and wait for its transcript.
+  function phraseEnded() {
+    clearTimeout(phraseTimer);
+    clearTimeout(holdTimer);
+    holdTimer = null;
+    if (!manual || !inPhrase) return;
+    inPhrase = false;
+    send({ type: "input_audio_buffer.commit" });
+    clearTimeout(pendingTurn);
+    pendingTurn = setTimeout(() => replyToTurn(null), 1500); // the transcript usually arrives in 0.3-0.8 s
+    stoppedAt = performance.now();
   }
 
   function log(role, fields) {
@@ -70,7 +123,11 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     clearTimeout(pendingTurn);
     pendingTurn = null;
     if (transcript) {
-      dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.` }] } }));
+      send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.` }] } });
+    }
+    if (inPhrase) {
+      owed = true; // they're still talking: answer once, after the rest of it
+      return;
     }
     requestResponse();
   }
@@ -78,8 +135,18 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
   // The mic is muted while our own TTS plays, otherwise OpenAI would hear the assistant's voice as the caller.
   function setMic(on) {
     clearTimeout(unmuteTimer);
-    if (on) unmuteTimer = setTimeout(() => micTrack && (micTrack.enabled = true), 400); // let the echo die down
-    else if (micTrack) micTrack.enabled = false;
+    if (on) {
+      // A short wait lets the echo die down; it was 400 ms, which swallowed a quick «հա» right after a question.
+      unmuteTimer = setTimeout(() => {
+        if (!micTrack || ended) return;
+        micTrack.enabled = true;
+        micOn = true;
+        if (manual && !inPhrase) send({ type: "input_audio_buffer.clear" }); // drop the silence sent while muted
+      }, manual ? 120 : 400);
+    } else {
+      if (micTrack) micTrack.enabled = false;
+      micOn = false;
+    }
   }
 
   /** Speaks a reply with ElevenLabs (streamed 24 kHz PCM, played as it arrives). */
@@ -90,6 +157,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     usage({ kind: "tts", chars: text.length });
     const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
     if (!res.ok || !res.body) return void ui.add(ui.t("voice.error"), "tool");
+    if (gen !== speakGen || ended) return void res.body.cancel();
     setMic(false);
     playing = true;
     ui.speaking?.(true);
@@ -153,7 +221,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
           pendingTurn = null;
           stoppedAt = 0;
           log("event", { text: "ignored a phrase without words (noise/echo)" });
-          if (!playing) ui.state("listening");
+          if (owed && !inPhrase) requestResponse(); // the reply we dropped for it is still owed
+          else if (!playing) ui.state("listening");
           break;
         }
         if (!pendingTurn) {
@@ -179,7 +248,11 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       }
       case "response.created":
         responseActive = true;
-        setMic(false); // muted as soon as the assistant starts answering, so it can't hear its own voice
+        skipText = false;
+        toolInResponse = false;
+        // server VAD: muted as soon as the assistant starts answering, so it can't hear its own voice.
+        // Manual turns keep the mic open while it thinks (the caller may go on talking); speak() mutes it.
+        if (!manual) setMic(false);
         break;
       // OpenAI speaking itself (comparison mode)
       case "output_audio_buffer.started":
@@ -200,7 +273,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       case "response.output_text.done": {
         const text = (ev.text ?? textBuf).replace(/[‹›]/g, "").trim(); // phrasebook slot marks, never meant to be said
         textBuf = "";
-        if (!text) break;
+        if (!text || skipText) break;
+        lastAgentText = text;
         const el = ui.add(text, "agent");
         speak(text, el).then(() => log("agent", { text, latency_ms: el.dataset.ms }));
         break;
@@ -208,6 +282,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       // the assistant checks the calendar or books
       case "response.function_call_arguments.done": {
         const booking = ev.name === "create_booking";
+        toolInResponse = true;
         const pending = ui.add(ui.t(booking ? "tool.book" : "tool.check"), "tool");
         let args = {};
         try { args = JSON.parse(ev.arguments || "{}"); } catch {}
@@ -253,6 +328,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     if (callStartedAt) usage({ kind: "call", seconds: Math.round((Date.now() - callStartedAt) / 1000), voice, speech });
     clearTimeout(pendingTurn);
     clearTimeout(unmuteTimer);
+    clearTimeout(phraseTimer);
+    clearTimeout(holdTimer);
     pc?.close();
     recorder?.stop();
     stream?.getTracks().forEach((t) => t.stop());
@@ -261,8 +338,23 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
   }
 
   try {
+    // Our own ears first: Silero ends the caller's phrases (and records each one for the log).
+    // ?turn=server keeps OpenAI's VAD, for comparison.
+    if (params.get("turn") !== "server") {
+      recorder = await createListener({
+        onStart: phraseStarted,
+        onPhrase: (wav) => {
+          phrasePaused();
+          log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) });
+        },
+        isPaused: () => playing || !micOn,
+        redemptionMs: 500, // then phrasePaused() waits a bit more
+        minSpeechMs: 120, // a quick «հա» is ~0.2 s
+      }).catch((err) => (console.error("listener", err), null));
+      manual = !!recorder;
+    }
     const extra = ["stt", "effort"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
-    const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${extra}`, { method: "POST" })).json();
+    const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
     if (!sess.key) throw new Error(sess.error || "no key");
     pc = new RTCPeerConnection();
     if (speech === "openai") {
@@ -302,11 +394,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
     callId = crypto.randomUUID();
     callStartedAt = Date.now();
-    // our own copy of each caller phrase, only for the log
-    recorder = await createListener({
-      onPhrase: (wav) => log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) }),
-      isPaused: () => playing,
-    }).catch((err) => (console.error("recorder", err), null));
+    log("event", { text: `turns: ${manual ? "silero" : "openai vad"}` });
     ui.state("connected");
   } catch (err) {
     stop();

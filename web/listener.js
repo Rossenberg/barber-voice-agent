@@ -21,11 +21,11 @@ function toWav(samples) {
 }
 
 /**
- * @param {{ onStart?: () => void, onPhrase: (wav: Blob) => void, isPaused: () => boolean }} handlers
+ * @param {{ onStart?: () => void, onPhrase: (wav: Blob) => void, isPaused: () => boolean, redemptionMs?: number, minSpeechMs?: number }} handlers
  * Phrases that start while isPaused() is true (the assistant is talking) are dropped, so its own
  * voice leaking into the mic is never sent as the caller's words.
  */
-export async function createListener({ onStart, onPhrase, isPaused }) {
+export async function createListener({ onStart, onPhrase, isPaused, redemptionMs = 400, minSpeechMs = 250 }) {
   if (!window.vad?.MicVAD) throw new Error("vad-web is not loaded");
   const state = { level: 0 };
   let startedWhilePaused = false;
@@ -39,9 +39,9 @@ export async function createListener({ onStart, onPhrase, isPaused }) {
     getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
     positiveSpeechThreshold: 0.5,
     negativeSpeechThreshold: 0.35,
-    redemptionMs: 400, // this much non-speech ends the phrase
+    redemptionMs, // this much non-speech ends the phrase
     preSpeechPadMs: 300, // keep the first syllable
-    minSpeechMs: 250, // ignore clicks and coughs
+    minSpeechMs, // shorter is ignored as clicks and coughs
     onFrameProcessed: (probs, frame) => {
       let sum = 0;
       for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
