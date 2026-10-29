@@ -50,7 +50,8 @@ export async function createListener({ onStart, onPhrase, isPaused, redemptionMs
       // stopped: that's the caller, not its echo — take the phrase instead of dropping all of it.
       if (inSpeech && startedWhilePaused && !isPaused()) {
         resumedAt ||= Date.now();
-        if (Date.now() - resumedAt > 250 && probs.isSpeech > 0.5) {
+        // 250 ms lost a quick «այո» said right as the reply ended; an echo dies out well before 120 ms
+        if (Date.now() - resumedAt > 120 && probs.isSpeech > 0.5) {
           startedWhilePaused = false;
           if (DEBUG) console.log("VAD speech kept: went on after the assistant stopped");
           onStart?.();
