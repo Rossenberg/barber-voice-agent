@@ -26,6 +26,8 @@ interface Env {
   AZURE_SPEECH_KEY: string; // candidate speech-to-text with native hy-AM (compared on /lab/)
   AZURE_SPEECH_REGION: string;
   OPENAI_API_KEY: string; // candidate speech-to-text and the Realtime (speech-to-speech) test page
+  TELEGRAM_BOT_TOKEN?: string; // call reviews go to the owner's Telegram (optional)
+  TELEGRAM_CHAT_ID?: string;
 }
 
 interface Settings {
@@ -634,7 +636,7 @@ async function ttsStream(env: Env, req: Request): Promise<Response> {
 }
 
 /** Stores one /realtime/ event: a transcript line, an assistant reply, or the audio of a caller's phrase. */
-async function realtimeLog(env: Env, req: Request): Promise<Response> {
+async function realtimeLog(env: Env, req: Request, ctx: ExecutionContext): Promise<Response> {
   const form = await req.formData();
   const callId = cleanText(form.get("call_id"), 64);
   const role = cleanText(form.get("role"), 16);
@@ -651,6 +653,14 @@ async function realtimeLog(env: Env, req: Request): Promise<Response> {
   await env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?)")
     .bind(callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
     .run();
+  // the call just ended: review it now
+  if (role === "usage" && String(form.get("text")).includes('"kind":"call"')) {
+    ctx.waitUntil(
+      env.DB.prepare("SELECT COUNT(*) AS n FROM realtime_log WHERE call_id = ? AND role = 'user'").bind(callId).first<{ n: number }>()
+        .then((r) => ((r?.n ?? 0) >= 2 ? reviewConversation(env, callId) : undefined))
+        .catch((err) => console.error("review", err)),
+    );
+  }
   return json({ ok: true });
 }
 
@@ -845,9 +855,107 @@ async function admin(env: Env, req: Request, path: string): Promise<Response> {
 
 // ---------------------------------------------------------------- router
 
+// ---------------------------------------------------------------- call reviews
+
+// A stronger model reads each finished call/chat and lists what the assistant got wrong. On test transcripts
+// gpt-6-astra caught the Armenian mistakes gpt-6.1-sol missed («Ցանկա՞նք փոխել»), at ~$0.025 per call.
+const REVIEW_MODEL = "gpt-6-astra";
+const REVIEW_PRICE = { in: 10, cached: 1, out: 50 }; // $ per 1M tokens
+const REVIEWS_SINCE = "2026-10-29 07:50:00"; // older conversations are not reviewed
+const REVIEWS_PER_RUN = 2; // each takes 5-10 s and runs after a response (waitUntil allows ~30 s)
+let lastSweep = 0;
+
+const REVIEW_RUBRIC = `You review conversations of an AI receptionist of a barbershop in Yerevan. Only the ASSISTANT is judged; callers may speak slang.
+Language: correct, polite, literate Eastern Armenian with «Դուք/Ձեզ/Ձեր» (never «դու»); no slang (ախպեր, էգուց, կարամ, «ա» for «է»); no English/Russian words in Armenian letters (օքեյ, պերֆեկտ); correct grammar and verb forms (e.g. «Փոխե՞մ» / «Ցանկանո՞ւմ եք», never «Ցանկա՞նք»); «բայց» only for a real contrast; Russian/English replies (times too) when the caller speaks them; very short; no sentence starting with «Խնդրում եմ».
+Logic: never book a service the caller didn't name; book exactly what was asked (a group = one booking per person with their own service); bare hours 1–9 mean afternoon (չորսին = 16:00); outside opening hours is not "taken"; a dictated phone is confirmed by its last digits and saved in full; a change to a booking made in the same conversation is done by the assistant itself, not sent to an administrator; don't re-ask what the caller already said; times must match TOOL results and prices the price list; never say a booking is done before create_booking succeeded.
+Return JSON only: {"verdict":"ok|minor|serious","issues":[{"severity":"minor|serious","type":"language|logic","quote":"exact assistant words","problem":"short, in Russian","fix":"what it should have said, in correct Armenian (or the right action, in Russian)"}]}. Don't flag correct things. Recognition mistakes in CALLER lines are not the assistant's fault unless it acted on an obviously wrong reading without checking.`;
+
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * Reviews conversations that have been quiet for 3 minutes. No cron (the account's free cron slots are
+ * used up): it runs after API requests, at most once a minute per Worker instance, and right after a call ends.
+ */
+async function reviewFinishedConversations(env: Env, force = false) {
+  if (!force && Date.now() - lastSweep < 60_000) return;
+  lastSweep = Date.now();
+  const { results } = await env.DB.prepare(
+    `SELECT call_id FROM realtime_log WHERE created_at > ? GROUP BY call_id
+     HAVING MAX(created_at) < datetime('now', '-3 minutes') AND SUM(role = 'user') >= 2
+       AND call_id NOT IN (SELECT call_id FROM call_reviews)
+     ORDER BY MAX(id) LIMIT ?`,
+  ).bind(REVIEWS_SINCE, REVIEWS_PER_RUN).all<{ call_id: string }>();
+  for (const { call_id } of results) await reviewConversation(env, call_id);
+}
+
+async function reviewConversation(env: Env, callId: string) {
+  // claim it first, so two Worker instances never pay for the same review
+  const claim = await env.DB.prepare("INSERT OR IGNORE INTO call_reviews (call_id, model, verdict) VALUES (?, ?, 'pending')").bind(callId, REVIEW_MODEL).run();
+  if (!claim.meta.changes) return;
+  const { results: rows } = await env.DB.prepare("SELECT role, text, created_at FROM realtime_log WHERE call_id = ? AND role IN ('user', 'agent', 'event') ORDER BY id")
+    .bind(callId).all<{ role: string; text: string | null; created_at: string }>();
+  const lines = rows
+    .filter((r) => r.text && !/^(turns:|data channel|connection |ignored a phrase|error Cancellation)/.test(r.text))
+    .map((r) => `${r.role === "user" ? "CALLER" : r.role === "agent" ? "ASSISTANT" : "TOOL"}: ${r.role === "event" ? r.text!.slice(0, 300) : r.text}`);
+  const settings = await getSettings(env.DB);
+  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
+  const today = localNow().date;
+  const chat = callId.startsWith("chat-");
+  const context = `Channel: ${chat ? "website chat (times may be written as digits; it never asks for a phone)" : "phone call"}. Today: ${today} (${weekdayName(today)}), Yerevan. Hours: ${hoursText}.\nPrice list (id | Armenian | English | duration | price):\n${servicesText}`;
+
+  let verdict = "error", issues: { severity?: string; type?: string; quote?: string; problem?: string; fix?: string }[] = [], cost: number | null = null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: REVIEW_MODEL,
+        reasoning_effort: "low",
+        max_completion_tokens: 4000,
+        response_format: { type: "json_object" },
+        messages: [{ role: "system", content: `${REVIEW_RUBRIC}\n\n${context}` }, { role: "user", content: lines.join("\n") }],
+      }),
+    });
+    const data = (await res.json()) as { choices?: { message: { content: string } }[]; usage?: { prompt_tokens: number; completion_tokens: number; prompt_tokens_details?: { cached_tokens?: number } }; error?: { message?: string } };
+    if (!res.ok) throw new Error(data.error?.message ?? `openai ${res.status}`);
+    const u = data.usage!, cached = u.prompt_tokens_details?.cached_tokens ?? 0;
+    cost = ((u.prompt_tokens - cached) * REVIEW_PRICE.in + cached * REVIEW_PRICE.cached + u.completion_tokens * REVIEW_PRICE.out) / 1e6;
+    const out = JSON.parse(data.choices![0].message.content) as { verdict?: string; issues?: typeof issues };
+    issues = Array.isArray(out.issues) ? out.issues : [];
+    verdict = issues.some((i) => i.severity === "serious") ? "serious" : issues.length ? "minor" : "ok";
+  } catch (err) {
+    issues = [{ problem: String(err).slice(0, 300) }];
+  }
+  const saved = await env.DB.prepare("UPDATE call_reviews SET verdict = ?, issues = ?, cost_usd = ? WHERE call_id = ? RETURNING id")
+    .bind(verdict, JSON.stringify(issues), cost, callId).first<{ id: number }>();
+  if (!saved || (verdict !== "minor" && verdict !== "serious")) return;
+  if (await notifyTelegram(env, saved.id, callId, rows[0]?.created_at, verdict, issues)) {
+    await env.DB.prepare("UPDATE call_reviews SET notified = 1 WHERE id = ?").bind(saved.id).run();
+  }
+}
+
+/** One message per reviewed conversation, written so the owner can just say «BV-12» to Claude. */
+async function notifyTelegram(env: Env, id: number, callId: string, startedAt: string | undefined, verdict: string, issues: { severity?: string; type?: string; quote?: string; problem?: string; fix?: string }[]) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return false;
+  const settings = await getSettings(env.DB);
+  const when = startedAt ? new Date(startedAt.replace(" ", "T") + "Z").toLocaleString("ru-RU", { timeZone: "Asia/Yerevan", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+  const head = `${verdict === "serious" ? "🔴" : "🟡"} <b>${escapeHtml(settings.shop_name)}</b> · ${callId.startsWith("chat-") ? "чат" : "звонок"} ${when}`;
+  const body = issues.slice(0, 6).map((i, n) =>
+    `${n + 1}. ${i.type === "language" ? "Язык" : "Логика"}${i.severity === "serious" ? " (серьёзно)" : ""}\n«${escapeHtml(i.quote ?? "")}»\n❌ ${escapeHtml(i.problem ?? "")}\n✅ ${escapeHtml(i.fix ?? "")}`,
+  ).join("\n\n");
+  const text = `${head}\n\n${body}\n\nКод для Claude: <code>BV-${id}</code>`;
+  const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: text.slice(0, 4000), parse_mode: "HTML", disable_web_page_preview: true }),
+  });
+  return res.ok;
+}
+
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const path = new URL(req.url).pathname;
+    if (path.startsWith("/api/")) ctx.waitUntil(reviewFinishedConversations(env).catch((err) => console.error("reviews", err)));
     try {
       // Public: what the landing page needs to start a conversation and show prices.
       if (path === "/api/public/config" && req.method === "GET") {
@@ -896,7 +1004,7 @@ export default {
       if (path === "/api/rt-log" && req.method === "POST") {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
-        return await realtimeLog(env, req);
+        return await realtimeLog(env, req, ctx);
       }
       if (path === "/api/tts" && req.method === "POST") {
         const origin = req.headers.get("origin");
