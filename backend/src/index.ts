@@ -868,7 +868,8 @@ let lastSweep = 0;
 const REVIEW_RUBRIC = `You review conversations of an AI receptionist of a barbershop in Yerevan. Only the ASSISTANT is judged; callers may speak slang.
 Language: correct, polite, literate Eastern Armenian with «Դուք/Ձեզ/Ձեր» (never «դու»); no slang (ախպեր, էգուց, կարամ, «ա» for «է»); no English/Russian words in Armenian letters (օքեյ, պերֆեկտ); correct grammar and verb forms (e.g. «Փոխե՞մ» / «Ցանկանո՞ւմ եք», never «Ցանկա՞նք»); «բայց» only for a real contrast; Russian/English replies (times too) when the caller speaks them; very short; no sentence starting with «Խնդրում եմ».
 Logic: never book a service the caller didn't name; book exactly what was asked (a group = one booking per person with their own service); bare hours 1–9 mean afternoon (չորսին = 16:00); outside opening hours is not "taken"; a dictated phone is confirmed by its last digits and saved in full; a change to a booking made in the same conversation is done by the assistant itself, not sent to an administrator; don't re-ask what the caller already said; times must match TOOL results and prices the price list; never say a booking is done before create_booking succeeded.
-Return JSON only: {"verdict":"ok|minor|serious","issues":[{"severity":"minor|serious","type":"language|logic","quote":"exact assistant words","problem":"short, in Russian","fix":"what it should have said, in correct Armenian (or the right action, in Russian)"}]}. Don't flag correct things. Recognition mistakes in CALLER lines are not the assistant's fault unless it acted on an obviously wrong reading without checking.`;
+Return JSON only: {"verdict":"ok|minor|serious","issues":[{"severity":"minor|serious","type":"language|logic","quote":"exact assistant words","problem":"short, in Russian","fix":"what it should have said, in correct Armenian (or the right action, in Russian)"}]}. Don't flag correct things. Recognition mistakes in CALLER lines are not the assistant's fault unless it acted on an obviously wrong reading without checking.
+House rules that are correct (don't flag): slang «թրաշ» / «թրաշ դզել» = beard trim (beard_trim); «մազ», «կտրվել» = haircut; a group is checked with one check_availability using people = N and the longest service; a call TOOL line shows the full calendar answer — read requested_time_free / free times there.`;
 
 const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -896,7 +897,7 @@ async function reviewConversation(env: Env, callId: string) {
     .bind(callId).all<{ role: string; text: string | null; created_at: string }>();
   const lines = rows
     .filter((r) => r.text && !/^(turns:|data channel|connection |ignored a phrase|error Cancellation)/.test(r.text))
-    .map((r) => `${r.role === "user" ? "CALLER" : r.role === "agent" ? "ASSISTANT" : "TOOL"}: ${r.role === "event" ? r.text!.slice(0, 300) : r.text}`);
+    .map((r) => `${r.role === "user" ? "CALLER" : r.role === "agent" ? "ASSISTANT" : "TOOL"}: ${r.role === "event" ? r.text!.slice(0, 1200) : r.text}`);
   const settings = await getSettings(env.DB);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
   const today = localNow().date;
