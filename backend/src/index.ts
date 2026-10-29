@@ -276,6 +276,7 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
       free_times: spread(inPart, 4),
       free_times_hy: hy(spread(inPart, 4)),
       ...(inPart.length ? {} : { other_free_times_that_day: spread(starts, 3), other_free_times_that_day_hy: hy(spread(starts, 3)) }),
+      ...earliestFree(date, starts),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
     };
   }
@@ -284,7 +285,19 @@ async function checkAvailability(env: Env, body: Record<string, unknown>) {
     open: true,
     free_times: spread(starts),
     free_times_hy: hy(spread(starts)),
+    ...earliestFree(date, starts),
     ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
+  };
+}
+
+// "Can I come right now?" — the first free start, and for today how many minutes away it is.
+function earliestFree(date: string, starts: number[]) {
+  if (!starts.length) return {};
+  const now = localNow();
+  return {
+    earliest_free_time: toHHMM(starts[0]!),
+    earliest_free_time_hy: timeHy(starts[0]!),
+    ...(date === now.date ? { earliest_in_minutes: starts[0]! - now.minutes } : {}),
   };
 }
 

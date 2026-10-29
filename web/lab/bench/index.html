@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Запись фраз — BarberVoice</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0d0c0b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;800&family=Noto+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    main { padding: 20px 0 60px; display: grid; gap: 16px; }
+    h1 { font-size: 26px; margin: 0; }
+    .muted { color: var(--muted); font-size: 14px; margin: 0; line-height: 1.5; }
+    .card { display: grid; gap: 14px; padding: 20px 16px; border-radius: 20px; background: var(--surface); border: 1px solid var(--line); }
+    .round { font-size: 13px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; }
+    .round.noise { color: var(--accent); }
+    #phrase { font-family: "Noto Sans Armenian", sans-serif; font-size: 26px; line-height: 1.35; font-weight: 600; min-height: 3em; }
+    #rec { width: 100%; min-height: 64px; font-size: 18px; }
+    #rec.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #state { text-align: center; color: var(--muted); font-size: 14px; min-height: 20px; }
+    .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+    #level { height: 4px; border-radius: 2px; background: var(--ok); width: 0; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Запись фраз</h1>
+    <p class="muted">Читай фразу так, как сказал бы клиент по телефону: обычным голосом, не по слогам. Нажми «Записать», скажи фразу, нажми «Готово». Сначала все фразы в тишине, потом часть ещё раз с шумом (улица, телевизор, машина рядом).</p>
+    <div class="card">
+      <div class="round" id="round"><span id="roundName"></span><span id="count"></span></div>
+      <div class="bar"><i id="progress"></i></div>
+      <div id="phrase"></div>
+      <div id="level"></div>
+      <button class="btn btn-accent" id="rec">Записать</button>
+      <div class="row">
+        <button class="btn" id="back">← Назад</button>
+        <button class="btn" id="skip">Пропустить →</button>
+      </div>
+      <div id="state"></div>
+    </div>
+  </main>
+  <script type="module">
+    import { PHRASES } from "./phrases.js";
+
+    const $ = (id) => document.getElementById(id);
+    const RATE = 16000, MAX_SEC = 11; // the log takes up to 400 KB = 12.5 s of 16 kHz audio
+    const steps = [...PHRASES.map((p) => ({ p, noise: false })), ...PHRASES.filter((p) => p.noisy).map((p) => ({ p, noise: true }))];
+    const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+    const session = store.get("bench-session") || Date.now().toString(36);
+    store.set("bench-session", session);
+    let pos = Math.min(Number(store.get("bench-pos")) || 0, steps.length);
+
+    let ctx, stream, node, chunks = [], recording = false, stopTimer;
+
+    function show() {
+      if (pos >= steps.length) {
+        $("phrase").textContent = "Готово, спасибо! Все фразы записаны.";
+        $("rec").disabled = true;
+        $("roundName").textContent = "";
+        $("count").textContent = "";
+        $("progress").style.width = "100%";
+        return;
+      }
+      const { p, noise } = steps[pos];
+      $("rec").disabled = false;
+      $("phrase").textContent = p.text;
+      $("round").classList.toggle("noise", noise);
+      $("roundName").textContent = noise ? "Круг 2 — с шумом" : "Круг 1 — в тишине";
+      $("count").textContent = `${pos + 1} / ${steps.length}`;
+      $("progress").style.width = `${(pos / steps.length) * 100}%`;
+      store.set("bench-pos", String(pos));
+    }
+
+    function toWav(samples) {
+      const buf = new ArrayBuffer(44 + samples.length * 2);
+      const v = new DataView(buf);
+      const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+      str(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); str(8, "WAVE");
+      str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, RATE, true); v.setUint32(28, RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+      str(36, "data"); v.setUint32(40, samples.length * 2, true);
+      for (let i = 0; i < samples.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 0x7fff, true);
+      return new Blob([buf], { type: "audio/wav" });
+    }
+
+    // Plain linear resampling in case the browser ignores the 16 kHz request.
+    function resample(data, from) {
+      if (from === RATE) return data;
+      const out = new Float32Array(Math.floor(data.length * RATE / from));
+      for (let i = 0; i < out.length; i++) {
+        const x = i * from / RATE, j = Math.floor(x), f = x - j;
+        out[i] = (data[j] ?? 0) * (1 - f) + (data[j + 1] ?? data[j] ?? 0) * f;
+      }
+      return out;
+    }
+
+    async function start() {
+      // same mic settings as the real call page, so the recordings sound like calls do
+      stream ??= await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      ctx ??= new AudioContext({ sampleRate: RATE });
+      await ctx.resume();
+      const src = ctx.createMediaStreamSource(stream);
+      node = ctx.createScriptProcessor(4096, 1, 1);
+      chunks = [];
+      node.onaudioprocess = (e) => {
+        const d = e.inputBuffer.getChannelData(0);
+        chunks.push(new Float32Array(d));
+        let sum = 0;
+        for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+        $("level").style.width = `${Math.min(100, Math.sqrt(sum / d.length) * 600)}%`;
+      };
+      src.connect(node);
+      node.connect(ctx.destination);
+      recording = true;
+      $("rec").classList.add("on");
+      $("rec").textContent = "Готово";
+      $("state").textContent = "Говори…";
+      stopTimer = setTimeout(stop, MAX_SEC * 1000);
+    }
+
+    async function stop() {
+      clearTimeout(stopTimer);
+      if (!recording) return;
+      recording = false;
+      node.disconnect();
+      $("level").style.width = "0";
+      $("rec").classList.remove("on");
+      $("rec").textContent = "Записать";
+      const len = chunks.reduce((n, c) => n + c.length, 0);
+      const all = new Float32Array(len);
+      let o = 0;
+      for (const c of chunks) { all.set(c, o); o += c.length; }
+      const samples = resample(all, ctx.sampleRate);
+      if (samples.length < RATE * 0.3) { $("state").textContent = "Слишком коротко, попробуй ещё раз."; return; }
+      const { p, noise } = steps[pos];
+      const form = new FormData();
+      form.append("call_id", `bench-${session}`);
+      form.append("turn", String(p.id + (noise ? 1000 : 0)));
+      form.append("role", "user_audio");
+      form.append("text", JSON.stringify({ id: p.id, noise }));
+      form.append("audio", new File([toWav(samples)], "phrase.wav", { type: "audio/wav" }));
+      $("state").textContent = "Сохраняю…";
+      $("rec").disabled = true;
+      try {
+        const res = await fetch("/api/rt-log", { method: "POST", body: form });
+        if (!res.ok) throw new Error(String(res.status));
+        $("state").textContent = `Сохранено (${(samples.length / RATE).toFixed(1)} с)`;
+        pos++;
+        show();
+      } catch (err) {
+        $("state").textContent = `Не сохранилось (${err.message}), нажми «Записать» ещё раз.`;
+        $("rec").disabled = false;
+      }
+    }
+
+    $("rec").onclick = () => (recording ? stop() : start().catch((err) => ($("state").textContent = `Нет доступа к микрофону: ${err.message}`)));
+    $("back").onclick = () => { if (!recording && pos > 0) { pos--; show(); $("state").textContent = "Запиши заново — сохранится новая версия."; } };
+    $("skip").onclick = () => { if (!recording && pos < steps.length) { pos++; show(); $("state").textContent = ""; } };
+    show();
+  </script>
+</body>
+</html>
