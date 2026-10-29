@@ -1,48 +1,249 @@
 <!doctype html>
-<html lang="hy">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>BarberVoice — ԻԻ ադմինիստրատոր բարբերշոփի համար</title>
-  <meta name="description" content="Ձայնային ԻԻ ասիստենտ բարբերշոփերի համար․ պատասխանում է զանգերին հայերեն, ռուսերեն և անգլերեն, ասում է գները և գրանցում հաճախորդներին։">
-  <meta name="theme-color" content="#0d0c0b">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23e3a857'/%3E%3Cpath d='M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8' stroke='%231b1206' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <title>UMNIK — ИИ-администратор, который отвечает каждому клиенту</title>
+  <meta name="description" content="UMNIK принимает звонки и сообщения на армянском и русском, называет цены и сам записывает клиентов в ваш календарь — 24/7. Для барбершопов, клиник, колл-центров, офисов и фастфуда.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%23059669'/%3E%3Cpath d='M9 19v-6m4.7 9V10m4.6 12V10M23 19v-6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;500;600;800&family=Noto+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Armenian:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/landing.css">
 </head>
 <body>
-  <header class="top">
-    <div class="wrap">
-      <a class="brand" href="/">
-        <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#e3a857"/><path d="M9 20v-8m4.5 11V9m4.5 14V9m4.5 11v-8" stroke="#1b1206" stroke-width="3" stroke-linecap="round"/></svg>
-        BarberVoice
+  <header class="top" id="top">
+    <div class="wrap top-row">
+      <a class="brand" href="/" aria-label="UMNIK">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        UMNIK
       </a>
-      <div class="langs" id="langs" role="group" aria-label="Language">
-        <button data-lang="hy">ՀԱՅ</button><button data-lang="ru">РУС</button><button data-lang="en">ENG</button>
+      <nav class="nav" aria-label="Main">
+        <a href="#industries" data-i18n="nav.who">Для кого</a>
+        <a href="#demo" data-i18n="nav.demo">Демо</a>
+        <a href="#features" data-i18n="nav.features">Возможности</a>
+        <a href="#how" data-i18n="nav.how">Подключение</a>
+        <a href="#faq" data-i18n="nav.faq">Вопросы</a>
+      </nav>
+      <div class="top-actions">
+        <div class="langs" id="langs" role="group" aria-label="Language">
+          <button data-lang="hy">ՀԱՅ</button><button data-lang="ru">РУС</button>
+        </div>
+        <button class="btn btn-primary btn-sm" data-lead data-i18n="cta.connect">Подключить</button>
       </div>
     </div>
   </header>
 
   <main>
+    <!-- ============ HERO ============ -->
     <section class="hero">
+      <div class="hero-bg" aria-hidden="true"><span></span><span></span><span></span></div>
       <div class="wrap hero-grid">
-        <div>
-          <span class="eyebrow"><span class="pill-dot" id="pillDot"></span><span id="pillText" data-i18n="pill.on">Ասիստենտը միացված է</span></span>
-          <h1 data-i18n-html="hero.title">Զանգերին պատասխանում է <em>AI-ը</em>։ Դուք կտրում եք։</h1>
-          <p class="lead" data-i18n-html="hero.sub"></p>
+        <div class="hero-copy">
+          <span class="eyebrow"><span class="live-dot"></span><span data-i18n="hero.eyebrow">ИИ-администратор для бизнеса</span></span>
+          <h1 data-i18n-html="hero.title">Ваши руки заняты. <em>UMNIK</em> отвечает каждому клиенту.</h1>
+          <p class="lead" data-i18n="hero.sub">Принимает звонки и сообщения на армянском и русском, называет цены и сам записывает в ваш календарь — днём, ночью и в выходные.</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-lg" data-start>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+              <span data-i18n="cta.callDemo">Позвонить ассистенту</span>
+            </button>
+            <button class="btn btn-ghost btn-lg" data-lead data-i18n="cta.connectBiz">Подключить бизнес</button>
+          </div>
+          <ul class="hero-facts">
+            <li><b>24/7</b><span data-i18n="fact.always">без выходных и перерывов</span></li>
+            <li><b data-i18n="fact.langsN">2 языка</b><span data-i18n="fact.langs">армянский и русский</span></li>
+            <li><b>∞</b><span data-i18n="fact.parallel">звонков одновременно</span></li>
+          </ul>
         </div>
 
-        <div class="demo" id="assistant">
+        <!-- live conversation scene (decorative; the real demo is below) -->
+        <div class="scene" aria-hidden="true">
+          <div class="rings"><i></i><i></i><i></i></div>
+          <div class="phone-card">
+            <div class="pc-head">
+              <span class="pc-av">U</span>
+              <span class="pc-who"><b>UMNIK</b><small data-i18n="scene.status">отвечает на звонок</small></span>
+              <span class="pc-wave"><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+            <div class="pc-body" id="sceneBody"></div>
+          </div>
+          <div class="booking-chip" id="sceneChip">
+            <span class="bc-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+            <span><b data-i18n="scene.booked">Записан в календарь</b><small id="sceneChipText"></small></span>
+          </div>
+          <div class="mini-cal">
+            <div class="mc-head"><span data-i18n="scene.tomorrow">Завтра</span><span class="mc-dots"><i></i><i></i><i></i></span></div>
+            <div class="mc-row"><span>10:00</span><i class="busy"></i></div>
+            <div class="mc-row"><span>11:00</span><i class="slot" id="sceneSlot"></i></div>
+            <div class="mc-row"><span>12:00</span><i class="busy short"></i></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LOSS ============ -->
+    <section class="loss" id="loss">
+      <div class="wrap loss-grid">
+        <div class="reveal">
+          <span class="kicker" data-i18n="loss.kicker">Цена пропущенного звонка</span>
+          <h2 class="h2" data-i18n="loss.title">Каждый неотвеченный звонок — это клиент, который ушёл к конкуренту</h2>
+          <p class="sub" data-i18n="loss.sub">Клиент, который не дозвонился, редко перезванивает: он просто набирает следующий номер. Посчитайте, сколько это стоит вам.</p>
+          <div class="pains">
+            <div class="pain"><span class="pain-n">01</span><span data-i18n="pain.1">Вы с клиентом — телефон звонит и звонит</span></div>
+            <div class="pain"><span class="pain-n">02</span><span data-i18n="pain.2">Вечером, ночью и в выходные никто не отвечает</span></div>
+            <div class="pain"><span class="pain-n">03</span><span data-i18n="pain.3">Администратор болеет, в отпуске или занят другим</span></div>
+          </div>
+        </div>
+        <div class="calc reveal" id="calc">
+          <h3 data-i18n="calc.title">Сколько вы теряете</h3>
+          <label class="range">
+            <span><span data-i18n="calc.missed">Пропущенных звонков в день</span><b id="vMissed">5</b></span>
+            <input type="range" id="rMissed" min="1" max="40" value="5">
+          </label>
+          <label class="range">
+            <span><span data-i18n="calc.check">Средний чек</span><b id="vCheck">10 000 ֏</b></span>
+            <input type="range" id="rCheck" min="2000" max="100000" step="1000" value="10000">
+          </label>
+          <label class="range">
+            <span><span data-i18n="calc.rate">Из них записались бы</span><b id="vRate">50%</b></span>
+            <input type="range" id="rRate" min="10" max="90" step="5" value="50">
+          </label>
+          <div class="calc-out">
+            <span data-i18n="calc.month">Потери в месяц</span>
+            <b id="calcOut">750 000 ֏</b>
+            <small data-i18n="calc.note">Расчёт на 30 дней по вашим цифрам</small>
+          </div>
+          <button class="btn btn-primary" data-lead data-i18n="calc.cta">Перестать терять клиентов</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INDUSTRIES ============ -->
+    <section id="industries">
+      <div class="wrap">
+        <div class="head reveal">
+          <span class="kicker" data-i18n="ind.kicker">Для кого</span>
+          <h2 class="h2" data-i18n="ind.title">Один UMNIK — любой бизнес, где звонят клиенты</h2>
+          <p class="sub" data-i18n="ind.sub">Вы выбираете сферу, добавляете свои услуги и цены — и ассистент говорит именно о вашем бизнесе.</p>
+        </div>
+        <div class="industries">
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <g class="snip-a"><path d="M32 33 18 18" class="si-line"/><circle cx="16" cy="44" r="6" class="si-ring"/></g>
+                <g class="snip-b"><path d="M32 33 46 18" class="si-line"/><circle cx="48" cy="44" r="6" class="si-ring"/></g>
+                <path d="M32 33 21 39M32 33l11 6" class="si-line"/>
+                <circle cx="32" cy="33" r="2.6" class="si-dot"/>
+                <path class="hair h1" d="M24 12l-2 4M30 9v5M38 10l-1 5"/>
+              </svg>
+            </div>
+            <span class="badge live" data-i18n="ind.live">Демо работает</span>
+            <h3 data-i18n="ind.barber.t">Барбершопы и салоны</h3>
+            <p data-i18n="ind.barber.d">Запись на стрижку, перенос, «я и друг», цены и свободное время.</p>
+            <q data-i18n="ind.barber.q">«Թրաշս դզեմ, էգուց 11-ին կարա՞մ գամ»</q>
+          </article>
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <path d="M22 18c4-3 7 0 10 0s6-3 10 0c4 3 2 10 1 14-1 5-2 14-6 14-3 0-2-9-5-9s-2 9-5 9c-4 0-5-9-6-14-1-4-3-11 1-14z" class="si-solid"/>
+                <path class="spark" d="M47 14v6M44 17h6"/><path class="spark s2" d="M16 22v4M14 24h4"/>
+              </svg>
+            </div>
+            <span class="badge" data-i18n="ind.soon">Скоро</span>
+            <h3 data-i18n="ind.dental.t">Стоматологии и клиники</h3>
+            <p data-i18n="ind.dental.d">Запись к врачу, первичная консультация, напоминание о визите.</p>
+            <q data-i18n="ind.dental.q">«Зуб болит, можно сегодня к врачу?»</q>
+          </article>
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <path d="M18 36v-4a14 14 0 0 1 28 0v4" class="si-line"/>
+                <rect x="14" y="34" width="8" height="12" rx="4" class="si-solid"/><rect x="42" y="34" width="8" height="12" rx="4" class="si-solid"/>
+                <path d="M46 46c0 4-4 6-10 6" class="si-line"/>
+                <path class="wave1" d="M54 26a8 8 0 0 1 0 12"/><path class="wave2" d="M58 22a14 14 0 0 1 0 20"/>
+              </svg>
+            </div>
+            <span class="badge" data-i18n="ind.soon">Скоро</span>
+            <h3 data-i18n="ind.call.t">Колл-центры</h3>
+            <p data-i18n="ind.call.d">Первая линия: отвечает на типовые вопросы и передаёт сложные оператору.</p>
+            <q data-i18n="ind.call.q">«Где мой заказ? Когда доставка?»</q>
+          </article>
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <rect x="16" y="18" width="32" height="30" rx="6" class="si-card"/>
+                <path d="M16 27h32M24 14v8M40 14v8" class="si-line"/>
+                <rect class="cal-cell c1" x="21" y="32" width="7" height="6" rx="2"/><rect class="cal-cell c2" x="30.5" y="32" width="7" height="6" rx="2"/><rect class="cal-cell c3" x="40" y="32" width="4" height="6" rx="2"/>
+                <rect class="cal-cell c4" x="21" y="40" width="7" height="5" rx="2"/>
+              </svg>
+            </div>
+            <span class="badge" data-i18n="ind.soon">Скоро</span>
+            <h3 data-i18n="ind.office.t">Офисы и сервисы</h3>
+            <p data-i18n="ind.office.d">Консультации, встречи, юристы, нотариусы, автосервисы — запись по вашему расписанию.</p>
+            <q data-i18n="ind.office.q">«Можно на консультацию в четверг?»</q>
+          </article>
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <path d="M17 30a15 11 0 0 1 30 0z" class="si-solid"/>
+                <rect x="16" y="33" width="32" height="4" rx="2" class="si-accent"/>
+                <path d="M17 41h30a0 0 0 0 1 0 0 5 5 0 0 1-5 5H22a5 5 0 0 1-5-5z" class="si-solid"/>
+                <path class="steam st1" d="M26 20c-2-3 2-4 0-7"/><path class="steam st2" d="M33 19c-2-3 2-4 0-7"/><path class="steam st3" d="M40 20c-2-3 2-4 0-7"/>
+              </svg>
+            </div>
+            <span class="badge" data-i18n="ind.soon">Скоро</span>
+            <h3 data-i18n="ind.food.t">Фастфуд и доставка</h3>
+            <p data-i18n="ind.food.d">Принимает заказы по телефону, отвечает про меню, адреса и время работы.</p>
+            <q data-i18n="ind.food.q">«Две шаурмы и колу, на Комитаса»</q>
+          </article>
+          <article class="ind ind-more reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <circle class="orbit o1" cx="32" cy="32" r="4"/><circle class="orbit o2" cx="32" cy="32" r="4"/><circle class="orbit o3" cx="32" cy="32" r="4"/>
+                <circle cx="32" cy="32" r="7" class="si-solid"/>
+              </svg>
+            </div>
+            <h3 data-i18n="ind.more.t">Ваш бизнес</h3>
+            <p data-i18n="ind.more.d">Фитнес, автомойки, отели, курсы. Если клиенты звонят — UMNIK поможет.</p>
+            <button class="link-arrow" data-lead data-i18n="ind.more.cta">Обсудить подключение →</button>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DEMO ============ -->
+    <section class="demo-sec" id="demo">
+      <div class="wrap demo-grid">
+        <div class="demo-copy reveal">
+          <span class="kicker" data-i18n="demo.kicker">Живое демо</span>
+          <h2 class="h2" data-i18n="demo.title">Поговорите с UMNIK прямо сейчас</h2>
+          <p class="sub" data-i18n="demo.sub">Это настоящий ассистент демо-барбершопа «Blade Barbershop». Позвоните или напишите — спросите цену, свободное время, запишитесь, перенесите запись.</p>
+          <ul class="checks">
+            <li data-i18n="demo.c1">Понимает разговорный армянский и русский</li>
+            <li data-i18n="demo.c2">Смотрит реальный календарь и записывает</li>
+            <li data-i18n="demo.c3">Отвечает за пару секунд</li>
+          </ul>
+          <details class="prices-box">
+            <summary data-i18n="prices.title">Прайс демо-барбершопа</summary>
+            <p class="prices-hint" data-i18n="prices.sub">Эти цены ассистент берёт из личного кабинета. У каждого бизнеса — свои.</p>
+            <div class="prices" id="priceList"></div>
+          </details>
+        </div>
+
+        <div class="demo reveal" id="assistant">
           <div class="demo-head">
-            <div class="demo-shop"><span id="shopName">Blade Barbershop</span><small data-i18n="demo.small">Դեմո զանգ բարբերշոփին</small></div>
-            <span class="status" id="status" data-state="idle" data-i18n="status.ready">Պատրաստ է</span>
+            <div class="demo-shop">
+              <span class="demo-av">B</span>
+              <span><b id="shopName">Blade Barbershop</b><small><span class="pill-dot" id="pillDot"></span><span id="pillText" data-i18n="pill.on">Ассистент включён</span></small></span>
+            </div>
+            <span class="status" id="status" data-state="idle" data-i18n="status.ready">Готов</span>
           </div>
 
           <div class="modes" role="tablist" aria-label="Mode">
-            <button role="tab" data-mode="call" aria-selected="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="mode.call">Զանգել</span></button>
-            <button role="tab" data-mode="chat" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="mode.chat">Գրել</span></button>
+            <button role="tab" data-mode="call" aria-selected="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="mode.call">Позвонить</span></button>
+            <button role="tab" data-mode="chat" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="mode.chat">Написать</span></button>
           </div>
 
           <div class="chat" id="chatPane" hidden>
@@ -50,190 +251,223 @@
             <div class="chips chat-chips" id="chatChips">
               <button class="chip" type="button">Թրաշս դզեմ, ինչ արժե՞</button>
               <button class="chip" type="button">Վաղը առավոտյան տեղ կա՞</button>
-              <button class="chip" type="button">Ես ու ընկերս ենք գալու</button>
+              <button class="chip" type="button">Можно завтра в 6 на фейд?</button>
             </div>
             <form class="chat-form" id="chatForm">
-              <input class="input" id="chatInput" autocomplete="off" maxlength="500" data-i18n-placeholder="chat.placeholder" placeholder="Գրեք հաղորդագրություն…">
-              <button class="btn btn-accent chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
+              <input class="input" id="chatInput" autocomplete="off" maxlength="500" data-i18n-placeholder="chat.placeholder" placeholder="Напишите сообщение…">
+              <button class="btn btn-primary chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
             </form>
           </div>
 
           <div class="call-pane" id="callPane">
-          <div class="voices" id="voices" role="group" aria-label="Voice">
-            <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b data-i18n="voice.female">Անի</b><span data-i18n="voice.femaleHint">Կանացի ձայն</span></span></button>
-            <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b data-i18n="voice.male">Արամ</b><span data-i18n="voice.maleHint">Տղամարդու ձայն</span></span></button>
-          </div>
-
-          <div class="stage">
-            <div class="orb" id="orb" data-mode="idle">
-              <div class="ring"></div><div class="halo"></div>
-              <div class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 10v4M10.5 7v10M14 9v6M17.5 11v2"/></svg></div>
+            <div class="voices" id="voices" role="group" aria-label="Voice">
+              <button class="voice" data-voice="female" aria-pressed="true"><span class="av">А</span><span><b data-i18n="voice.female">Ани</b><span data-i18n="voice.femaleHint">Женский голос</span></span></button>
+              <button class="voice" data-voice="male" aria-pressed="false"><span class="av">А</span><span><b data-i18n="voice.male">Арам</b><span data-i18n="voice.maleHint">Мужской голос</span></span></button>
             </div>
-          </div>
-          <p class="label" id="label" aria-live="polite"></p>
 
-          <div class="call-row">
-            <button class="btn btn-accent" id="startBtn">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
-              <span data-i18n="call.start">Զանգել</span>
-            </button>
-            <button class="btn btn-end" id="endBtn" hidden>
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1a1 1 0 0 1-.56.9 11.5 11.5 0 0 0-2.66 1.85 1 1 0 0 1-1.41-.02L.3 13.1a1 1 0 0 1 0-1.41A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.75 11.7 4.69a1 1 0 0 1 0 1.41l-2.47 2.46a1 1 0 0 1-1.41.02 11.3 11.3 0 0 0-2.66-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
-              <span data-i18n="call.end">Ավարտել</span>
-            </button>
-          </div>
-
-          <!-- the conversation text isn't shown on the landing (the call should feel like a phone call); /realtime/ shows it -->
-          <div class="transcript" id="transcript" hidden></div>
-
-          <div class="tries" id="tries">
-            <div class="tries-title" data-i18n="try.title">Փորձեք ասել</div>
-            <div class="chips">
-              <span class="chip">«Ախպեր ջան, էգուց 11-ին տեղ կա՞»</span>
-              <span class="chip">«Թրաշս դզեմ, ինչ արժե՞»</span>
-              <span class="chip">“Can I book a fade tomorrow?”</span>
+            <div class="stage">
+              <div class="orb" id="orb" data-mode="idle">
+                <div class="ring"></div><div class="ring r2"></div><div class="halo"></div>
+                <div class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 10v4M10.5 7v10M14 9v6M17.5 11v2"/></svg></div>
+              </div>
             </div>
-          </div>
+            <p class="label" id="label" aria-live="polite"></p>
 
-          <details class="caller" id="callerBox">
-            <summary data-i18n="caller.summary">Զանգողի համարը (դեմո)</summary>
-            <label class="field" style="margin-top:8px">
+            <div class="call-row">
+              <button class="btn btn-primary btn-lg" id="startBtn">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
+                <span data-i18n="call.start">Позвонить</span>
+              </button>
+              <button class="btn btn-end btn-lg" id="endBtn" hidden>
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1a1 1 0 0 1-.56.9 11.5 11.5 0 0 0-2.66 1.85 1 1 0 0 1-1.41-.02L.3 13.1a1 1 0 0 1 0-1.41A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.75 11.7 4.69a1 1 0 0 1 0 1.41l-2.47 2.46a1 1 0 0 1-1.41.02 11.3 11.3 0 0 0-2.66-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
+                <span data-i18n="call.end">Завершить</span>
+              </button>
+            </div>
+
+            <!-- the conversation text isn't shown on the landing (the call should feel like a phone call); /realtime/ shows it -->
+            <div class="transcript" id="transcript" hidden></div>
+
+            <div class="tries" id="tries">
+              <div class="tries-title" data-i18n="try.title">Попробуйте сказать</div>
+              <div class="chips">
+                <span class="chip">«Ախպեր ջան, էգուց 11-ին տեղ կա՞»</span>
+                <span class="chip">«Թրաշս դզեմ, ինչ արժե՞»</span>
+                <span class="chip">«Можно сегодня вечером на стрижку?»</span>
+              </div>
+            </div>
+
+            <details class="caller" id="callerBox">
+              <summary data-i18n="caller.summary">Номер звонящего (демо)</summary>
               <input class="input" id="callerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+374 91 23 45 67">
-            </label>
-            <p data-i18n="caller.hint">Իրական զանգի ժամանակ համարը որոշվում է ավտոմատ, և ասիստենտը հարցնում է՝ պահե՞լ այն։</p>
-          </details>
+              <p data-i18n="caller.hint">В настоящем звонке номер определяется автоматически: так ассистент находит ваши записи, чтобы перенести или отменить их.</p>
+            </details>
           </div>
         </div>
       </div>
     </section>
 
-    <div class="wrap stats">
-      <div class="stat"><b>24/7</b><span data-i18n="stat.always">առանց հանգստյան</span></div>
-      <div class="stat"><b>3</b><span data-i18n="stat.langs">լեզու՝ ՀԱՅ, РУС, ENG</span></div>
-      <div class="stat"><b>0</b><span data-i18n="stat.missed">բաց թողնված զանգ</span></div>
-    </div>
-
-    <section id="how">
-      <div class="wrap">
-        <h2 class="sec-title" data-i18n="how.title">Ինչպես է աշխատում</h2>
-        <p class="sec-sub" data-i18n="how.sub">Ամբողջ զանգը տևում է կես րոպե։</p>
-        <div class="steps">
-          <article class="card step">
-            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <path class="handset" d="M8 6.5c1 0 1.6.6 2.2 2l1 2.4c.4 1 .1 1.8-.6 2.4l-1 .8c.9 2.3 2.8 4.3 5.2 5.3l.8-1c.6-.7 1.5-1 2.4-.6l2.4 1c1.4.6 2 1.2 2 2.2 0 2.4-2 4.5-4.6 4.5C10.6 25.5 6.5 19.6 6.5 11c0-2.5 0-4.5 1.5-4.5z" fill="#e3a857"/>
-              <path class="wave" d="M19 9a6 6 0 0 1 4 4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
-              <path class="wave w2" d="M19.5 4.5a10.5 10.5 0 0 1 8 8" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
-            </svg></div>
-            <h3 data-i18n="how.1.t">Հաճախորդը զանգում է</h3>
-            <p data-i18n="how.1.d">Ձեր սովորական համարին։ Եթե զբաղված եք, պատասխանում է ասիստենտը։</p>
-          </article>
-          <article class="card step">
-            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect x="5" y="7" width="22" height="20" rx="4" stroke="#f4efe7" stroke-width="2"/>
-              <path d="M5 13h22M11 4.5v4M21 4.5v4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
-              <rect class="cell" x="16.5" y="16" width="7" height="7" rx="2"/>
-              <path class="tick" d="M17.8 19.6l1.6 1.6 3-3.2" stroke="#e3a857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg></div>
-            <h3 data-i18n="how.2.t">Ասիստենտը ստուգում է օրացույցը</h3>
-            <p data-i18n="how.2.d">Ասում է ազատ ժամը, գինը և գրանցում մի քանի վայրկյանում։</p>
-          </article>
-          <article class="card step">
-            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect x="9" y="3.5" width="14" height="25" rx="3.5" stroke="#f4efe7" stroke-width="2"/>
-              <rect class="cell" x="12" y="9" width="8" height="4" rx="1.5"/>
-              <rect class="cell" x="12" y="15" width="8" height="4" rx="1.5" style="animation-delay:.4s"/>
-              <path d="M14 24.5h4" stroke="#f4efe7" stroke-width="2" stroke-linecap="round"/>
-            </svg></div>
-            <h3 data-i18n="how.3.t">Դուք տեսնում եք գրանցումը</h3>
-            <p data-i18n="how.3.d">Վահանակում, Altegio-ում կամ Google Օրացույցում։</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
+    <!-- ============ FEATURES ============ -->
     <section id="features">
       <div class="wrap">
-        <h2 class="sec-title" data-i18n="feat.title">Խոսում է ինչպես ձեր ադմինիստրատորը</h2>
-        <p class="sec-sub" data-i18n="feat.sub">Միայն ավելի արագ ու առանց բաց թողնված զանգերի։</p>
+        <div class="head reveal">
+          <span class="kicker" data-i18n="feat.kicker">Возможности</span>
+          <h2 class="h2" data-i18n="feat.title">Работает как лучший администратор. Только не устаёт.</h2>
+        </div>
         <div class="features">
-          <article class="card">
-            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <path d="M5 8a4 4 0 0 1 4-4h14a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4h-8l-6 5v-5H9a4 4 0 0 1-4-4z" fill="#e3a857"/>
-              <text class="bub-a" x="16" y="16.5" text-anchor="middle" font-size="10" font-weight="800" fill="#1b1206" font-family="Noto Sans Armenian, sans-serif">Ա</text>
-              <text class="bub-b" x="16" y="16.5" text-anchor="middle" font-size="10" font-weight="800" fill="#1b1206" font-family="Noto Sans, sans-serif">A</text>
-            </svg></div>
-            <h3 data-i18n="feat.slang.t">Հասկանում է խոսակցական հայերենը</h3>
-            <p data-i18n="feat.slang.d">Ժարգոն, ռուսերեն բառեր, «ախպեր ջան»՝ ամեն ինչ հասկանում է։</p>
-            <div class="slang"><span>թրաշս դզեմ</span><span>էգուց 11-ին կարամ գամ</span><span>ֆեյդով</span><span>մաշինկայով</span></div>
+          <article class="feat feat-wide reveal">
+            <div class="feat-art speech" aria-hidden="true">
+              <span class="bubble b1">Ախպեր ջան, էգուց կարա՞մ գամ</span>
+              <span class="bubble b2">Можно на завтра?</span>
+              <span class="bubble b3 me">Վաղը ժամը տասնմեկին ազատ է։</span>
+            </div>
+            <h3 data-i18n="f1.t">Понимает живую речь</h3>
+            <p data-i18n="f1.d">Разговорный армянский, сленг, русские слова вперемешку, исправления на ходу — «нет, не завтра, послезавтра».</p>
           </article>
-          <article class="card">
-            <div class="ico"><svg viewBox="0 0 32 32" aria-hidden="true">
-              <g fill="#e3a857"><rect class="bar" x="6" y="10" width="3.5" height="12" rx="1.75"/><rect class="bar" x="11.5" y="6" width="3.5" height="20" rx="1.75"/><rect class="bar" x="17" y="9" width="3.5" height="14" rx="1.75"/><rect class="bar" x="22.5" y="12" width="3.5" height="8" rx="1.75"/></g>
-            </svg></div>
-            <h3 data-i18n="feat.short.t">Խոսում է կարճ ու արագ</h3>
-            <p data-i18n="feat.short.d">Առանց երկար բացատրությունների՝ «Հա, ազատ է։ Գրանցե՞մ»։</p>
+          <article class="feat reveal">
+            <div class="feat-art cal" aria-hidden="true">
+              <i></i><i></i><i class="on"></i><i></i><i class="move"></i><i></i><i></i><i class="x"></i>
+            </div>
+            <h3 data-i18n="f2.t">Записывает, переносит, отменяет</h3>
+            <p data-i18n="f2.d">Сам проверяет календарь, предлагает свободное время и не допускает двойных записей.</p>
           </article>
-          <article class="card">
-            <div class="ico"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect x="4" y="9" width="24" height="14" rx="4" stroke="#f4efe7" stroke-width="2"/>
-              <circle class="digit" cx="10" cy="16" r="1.8" fill="#e3a857"/><circle class="digit d2" cx="16" cy="16" r="1.8" fill="#e3a857"/><circle class="digit d3" cx="22" cy="16" r="1.8" fill="#e3a857"/>
-            </svg></div>
-            <h3 data-i18n="feat.phone.t">Պահում է զանգողի համարը</h3>
-            <p data-i18n="feat.phone.d">Հարցնում է՝ պահե՞լ համարը, և գրանցումը պատրաստ է։</p>
+          <article class="feat reveal">
+            <div class="feat-art group" aria-hidden="true"><span>А</span><span>Д</span><span class="plus">+1</span></div>
+            <h3 data-i18n="f3.t">Группы и друзья</h3>
+            <p data-i18n="f3.d">«Я и друг», «друг не придёт», «вместо друга придёт брат» — разбирается в каждом случае.</p>
           </article>
-          <article class="card">
-            <div class="ico"><svg viewBox="0 0 32 32" aria-hidden="true">
-              <rect class="track" x="4" y="10" width="24" height="12" rx="6" stroke="#f4efe7" stroke-width="2"/>
-              <circle class="knob" cx="10" cy="16" r="4" fill="#e3a857"/>
-            </svg></div>
-            <h3 data-i18n="feat.control.t">Ամբողջական կառավարում</h3>
-            <p data-i18n="feat.control.d">Միացնել և անջատել, փոխել գները, ծառայություններն ու ժամերը՝ հեռախոսից։</p>
+          <article class="feat reveal">
+            <div class="feat-art price" aria-hidden="true"><span class="pr-row"><i></i><b>10 000 ֏</b></span><span class="pr-row"><i></i><b>6 000 ֏</b></span><span class="pr-row hl"><i></i><b>16 000 ֏</b></span></div>
+            <h3 data-i18n="f4.t">Ваши услуги и цены</h3>
+            <p data-i18n="f4.d">Ассистент говорит только то, что вы записали в кабинете. Поменяли цену — он уже знает.</p>
+          </article>
+          <article class="feat reveal">
+            <div class="feat-art channels" aria-hidden="true"><span class="ch call"></span><span class="ch-link"></span><span class="ch brain">U</span><span class="ch-link"></span><span class="ch chat"></span></div>
+            <h3 data-i18n="f5.t">Звонки и чат — один мозг</h3>
+            <p data-i18n="f5.d">Одинаково отвечает по телефону и в переписке на сайте.</p>
+          </article>
+          <article class="feat reveal">
+            <div class="feat-art qa" aria-hidden="true"><span class="qa-shield"></span><span class="qa-tick"></span></div>
+            <h3 data-i18n="f6.t">Контроль качества</h3>
+            <p data-i18n="f6.d">Каждый разговор проверяет отдельная ИИ-модель. Если что-то пошло не так — вы узнаете в Telegram.</p>
           </article>
         </div>
       </div>
     </section>
 
-    <section id="integrations">
+    <!-- ============ HOW ============ -->
+    <section class="how" id="how">
       <div class="wrap">
-        <h2 class="sec-title" data-i18n="int.title">Ինտեգրացիաներ</h2>
-        <p class="sec-sub" data-i18n="int.sub">Գրանցումները գնում են այնտեղ, որտեղ արդեն աշխատում եք։</p>
-        <div class="integrations">
-          <div class="int"><span class="logo" style="background:#1f2a1f;color:#7fdc8a">al</span><span><b>Altegio</b><span data-i18n="int.altegio">Օնլայն գրանցում և CRM</span></span></div>
-          <div class="int"><span class="logo" style="background:#1d2536;color:#8fb3ff">31</span><span><b>Google Calendar</b><span data-i18n="int.gcal">Գրանցումները՝ ձեր օրացույցում</span></span></div>
-          <div class="int"><span class="logo" style="background:#2c2117;color:#e3a857">CRM</span><span><b data-i18n="int.crm">CRM համակարգեր</b><span>Bitrix24, amoCRM</span></span></div>
-          <div class="int"><span class="logo" style="background:#2a1b1b;color:#ff9b8f">☎</span><span><b data-i18n="int.phone">Հայկական համարներ</b><span>Ucom, Viva, Team</span></span></div>
+        <div class="head reveal">
+          <span class="kicker" data-i18n="how.kicker">Подключение</span>
+          <h2 class="h2" data-i18n="how.title">Три шага до первого звонка</h2>
+        </div>
+        <ol class="steps">
+          <li class="step reveal"><span class="step-n">1</span><h3 data-i18n="how.1.t">Регистрируетесь</h3><p data-i18n="how.1.d">Выбираете сферу бизнеса — барбершоп, клиника, офис или другую.</p></li>
+          <li class="step reveal"><span class="step-n">2</span><h3 data-i18n="how.2.t">Добавляете услуги и часы</h3><p data-i18n="how.2.d">Цены, длительность, график работы и мастеров — в личном кабинете.</p></li>
+          <li class="step reveal"><span class="step-n">3</span><h3 data-i18n="how.3.t">Подключаем ваш номер</h3><p data-i18n="how.3.d">Звонки идут на UMNIK, записи появляются в вашем календаре.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ CABINET PREVIEW ============ -->
+    <section class="cabinet-sec">
+      <div class="wrap cab-grid">
+        <div class="reveal">
+          <span class="kicker" data-i18n="cab.kicker">Личный кабинет</span>
+          <h2 class="h2" data-i18n="cab.title">Все записи — в одном календаре</h2>
+          <p class="sub" data-i18n="cab.sub">Видите, кто записался и на что. Закрываете часы, когда заняты. Меняете услуги и цены — ассистент сразу говорит по-новому.</p>
+          <ul class="checks">
+            <li data-i18n="cab.c1">Календарь записей по дням</li>
+            <li data-i18n="cab.c2">Закрыть часы или выходной в один клик</li>
+            <li data-i18n="cab.c3">Свои услуги, цены и длительность</li>
+            <li data-i18n="cab.c4">Включить или выключить ассистента</li>
+          </ul>
+        </div>
+        <div class="cabinet reveal" aria-hidden="true">
+          <div class="cab-top"><span class="cab-dot"></span><span class="cab-dot"></span><span class="cab-dot"></span><span class="cab-title" data-i18n="cab.mock">Календарь · Пятница</span></div>
+          <div class="cab-body">
+            <div class="cab-times"><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span></div>
+            <div class="cab-col">
+              <div class="ev e1"><b>Արամ</b><small data-i18n="cab.e1">Стрижка · 30 мин</small></div>
+              <div class="ev e2 ai"><b>Դավիթ</b><small data-i18n="cab.e2">Фейд + борода · UMNIK</small></div>
+              <div class="ev e3 closed"><small data-i18n="cab.closed">Закрыто</small></div>
+            </div>
+            <div class="cab-col">
+              <div class="ev e4"><b>Тигран</b><small data-i18n="cab.e4">Борода · 30 мин</small></div>
+              <div class="ev e5 ai new"><b>Սամվել</b><small data-i18n="cab.e5">Стрижка · UMNIK</small></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <section id="prices">
-      <div class="wrap">
-        <h2 class="sec-title" data-i18n="prices.title">Դեմո բարբերշոփի գները</h2>
-        <p class="sec-sub" data-i18n="prices.sub">Ասիստենտը գները վերցնում է վահանակից։ Փոխեք այնտեղ, և հաջորդ զանգին արդեն նոր գինը կասի։</p>
-        <div class="prices" id="priceList"></div>
+    <!-- ============ FAQ ============ -->
+    <section id="faq">
+      <div class="wrap faq-wrap">
+        <div class="head reveal">
+          <span class="kicker" data-i18n="faq.kicker">Вопросы</span>
+          <h2 class="h2" data-i18n="faq.title">Частые вопросы</h2>
+        </div>
+        <div class="faq reveal">
+          <details><summary data-i18n="faq.1.q">Клиенты поймут, что говорят с роботом?</summary><p data-i18n="faq.1.a">Голос естественный, ответы короткие, как у живого администратора. Если клиент прямо спросит — UMNIK честно скажет, что он ИИ-помощник, и продолжит запись.</p></details>
+          <details><summary data-i18n="faq.2.q">Что, если вопрос сложный?</summary><p data-i18n="faq.2.a">UMNIK не придумывает ответы. Если информации нет, он вежливо предложит связаться с администратором и передаст вам вопрос.</p></details>
+          <details><summary data-i18n="faq.3.q">Как подключить мой номер?</summary><p data-i18n="faq.3.a">Через переадресацию с вашего номера у Ucom, Viva или Team. Номер для клиентов не меняется.</p></details>
+          <details><summary data-i18n="faq.4.q">Каждый бизнес получает своего ассистента?</summary><p data-i18n="faq.4.a">Да. У каждого бизнеса свои услуги, цены, часы и календарь. На ваш номер UMNIK отвечает только о вашем бизнесе.</p></details>
+          <details><summary data-i18n="faq.5.q">Сколько стоит?</summary><p data-i18n="faq.5.a">Зависит от количества звонков. Оставьте заявку — подберём тариф и дадим попробовать на ваших клиентах.</p></details>
+          <details><summary data-i18n="faq.6.q">На каких языках говорит?</summary><p data-i18n="faq.6.a">На армянском и русском, понимает разговорную речь и сленг. Английский тоже понимает.</p></details>
+        </div>
       </div>
     </section>
 
+    <!-- ============ FINAL CTA ============ -->
     <section class="final">
       <div class="wrap">
-        <h2 class="sec-title" data-i18n="cta.title">Ուզու՞մ եք նույնը ձեր բարբերշոփի համար</h2>
-        <p class="sec-sub" data-i18n="cta.sub">Միացնում ենք ձեր համարին և օրացույցին մեկ օրում։</p>
-        <div class="final-actions">
-          <button class="btn btn-accent" data-start><span data-i18n="call.demo">Զանգել դեմոյին</span></button>
-          <a class="btn btn-ghost" href="/dashboard/" data-i18n="cta.dashboard">Բացել վահանակը</a>
+        <div class="final-card reveal">
+          <div class="rings final-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+          <h2 data-i18n="final.title">Пусть ни один клиент больше не услышит длинные гудки</h2>
+          <p data-i18n="final.sub">Подключим UMNIK к вашему бизнесу и номеру. Первые звонки — на тест.</p>
+          <div class="final-actions">
+            <button class="btn btn-white btn-lg" data-lead data-i18n="cta.connectBiz">Подключить бизнес</button>
+            <button class="btn btn-outline-white btn-lg" data-start data-i18n="cta.callDemo">Позвонить ассистенту</button>
+          </div>
         </div>
       </div>
     </section>
   </main>
 
-  <footer>
-    <div class="wrap">
-      <span>© 2026 BarberVoice · WeBoost</span>
-      <a class="link-btn" href="/dashboard/" data-i18n="nav.dashboard">Բարբերի վահանակ</a>
+  <footer class="foot">
+    <div class="wrap foot-row">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>UMNIK</a>
+      <span class="foot-note" data-i18n="foot.note">ИИ-администратор для бизнеса · Ереван</span>
+      <span class="foot-copy">© 2026 UMNIK · WeBoost</span>
     </div>
   </footer>
 
-  <div class="fab" id="fab"><button class="btn btn-accent" data-start><span data-i18n="call.demo">Զանգել դեմոյին</span></button></div>
+  <div class="fab" id="fab"><button class="btn btn-primary btn-lg" data-start><span data-i18n="cta.callDemo">Позвонить ассистенту</span></button></div>
+
+  <!-- lead form -->
+  <dialog class="lead-dialog" id="leadDialog" aria-labelledby="leadTitle">
+    <form class="lead-form" id="leadForm" novalidate>
+      <button class="lead-close" type="button" id="leadClose" aria-label="Close">×</button>
+      <h2 id="leadTitle" data-i18n="lead.title">Подключить UMNIK</h2>
+      <p class="lead-sub" data-i18n="lead.sub">Оставьте контакт — свяжемся в течение дня, настроим ассистента под ваш бизнес.</p>
+      <label class="field"><span data-i18n="lead.name">Ваше имя</span><input class="input" name="name" autocomplete="name" required maxlength="80"></label>
+      <label class="field"><span data-i18n="lead.phone">Телефон или Telegram</span><input class="input" name="contact" autocomplete="tel" required maxlength="80" placeholder="+374 …"></label>
+      <label class="field"><span data-i18n="lead.industry">Сфера</span>
+        <select class="input" name="industry">
+          <option value="barber" data-i18n="ind.barber.t">Барбершопы и салоны</option>
+          <option value="dental" data-i18n="ind.dental.t">Стоматологии и клиники</option>
+          <option value="callcenter" data-i18n="ind.call.t">Колл-центры</option>
+          <option value="office" data-i18n="ind.office.t">Офисы и сервисы</option>
+          <option value="food" data-i18n="ind.food.t">Фастфуд и доставка</option>
+          <option value="other" data-i18n="lead.other">Другое</option>
+        </select>
+      </label>
+      <label class="field"><span data-i18n="lead.company">Название бизнеса</span><input class="input" name="company" maxlength="120"></label>
+      <p class="lead-msg" id="leadMsg" role="status"></p>
+      <button class="btn btn-primary btn-lg" type="submit" id="leadSubmit" data-i18n="lead.send">Отправить заявку</button>
+    </form>
+  </dialog>
 
   <script src="/config.js"></script>
   <!-- Silero VAD (speech start/end detection in the browser) -->

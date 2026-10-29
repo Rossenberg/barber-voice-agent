@@ -1017,6 +1017,24 @@ async function reviewConversation(env: Env, callId: string) {
 }
 
 /** One message per reviewed conversation, written so the owner can just say «BV-12» to Claude. */
+/** "Connect your business" form on the landing: saved, and sent to the owner's Telegram. */
+async function saveLead(env: Env, req: Request): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const name = cleanText(body.name, 80), contact = cleanText(body.contact, 80);
+  if (!name || !contact) return json({ error: "name_and_contact_required" }, 400);
+  const industry = cleanText(body.industry, 30), company = cleanText(body.company, 120), lang = cleanText(body.lang, 5);
+  const { meta } = await env.DB.prepare("INSERT INTO leads (name, contact, industry, company, lang) VALUES (?, ?, ?, ?, ?)").bind(name, contact, industry || null, company || null, lang || null).run();
+  if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    const text = `🟢 <b>Новая заявка UMNIK</b> #${meta.last_row_id}\n\n👤 ${escapeHtml(name)}\n📞 ${escapeHtml(contact)}\n🏷 ${escapeHtml(industry || "—")}${company ? `\n🏢 ${escapeHtml(company)}` : ""}\n🌐 ${lang === "hy" ? "армянский" : "русский"}`;
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text, parse_mode: "HTML" }),
+    }).catch((err) => console.error("lead telegram", err));
+  }
+  return json({ ok: true });
+}
+
 async function notifyTelegram(env: Env, id: number, callId: string, startedAt: string | undefined, verdict: string, issues: { severity?: string; type?: string; quote?: string; problem?: string; fix?: string }[]) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return false;
   const settings = await getSettings(env.DB);
@@ -1082,6 +1100,11 @@ export default {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         return await chatReply(env, req);
+      }
+      if (path === "/api/lead" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
+        return await saveLead(env, req);
       }
       if (path === "/api/rt-log" && req.method === "POST") {
         const origin = req.headers.get("origin");
