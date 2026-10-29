@@ -29,6 +29,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
   let stoppedAt = 0, agentEl = null, textBuf = "";
   let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0, playing = false;
   let callId = "", turn = 0, callStartedAt = 0, ended = false;
+  let callToken = ""; // the server's signed pass: who is calling, for finding/changing their bookings
   // One response at a time: asking for a new one while another runs is an error and made the assistant
   // say extra lines («…դեռ ընթացքի մեջ է»), so requests wait for the current response to finish.
   let responseActive = false, responseWanted = false;
@@ -286,7 +287,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
         const pending = ui.add(ui.t(booking ? "tool.book" : "tool.check"), "tool");
         let args = {};
         try { args = JSON.parse(ev.arguments || "{}"); } catch {}
-        const ready = fetch("/api/rt-tool", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: ev.name, args }) })
+        const ready = fetch("/api/rt-tool", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: ev.name, args, call_token: callToken }) })
           .then((r) => r.json())
           .catch(() => ({ error: "network" }))
           .then((result) => {
@@ -355,6 +356,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     }
     const extra = ["stt", "effort", "nr"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
     const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
+    callToken = sess.call_token ?? "";
     if (!sess.key) throw new Error(sess.error || "no key");
     pc = new RTCPeerConnection();
     if (speech === "openai") {

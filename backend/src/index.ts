@@ -7,9 +7,11 @@ import {
   isDate,
   json,
   localNow,
+  makeCallToken,
   makeToken,
   normalizePhone,
   parseHHMM,
+  readCallToken,
   safeEqual,
   toHHMM,
   weekdayName,
@@ -208,7 +210,21 @@ function resolveServices(services: Service[], raw: unknown): Service | undefined
 
 const DISABLED = { success: false, error: "assistant_disabled", message: "The barbershop has switched the assistant off. Apologize and ask the client to call back later." };
 
+// What the model should do with a calendar answer. Rules in the prompt alone were skipped now and then
+// (it offered «Գրանցե՞մ» before the caller had said which service), a field in the tool result is not.
+function nextStep(body: Record<string, unknown>, result: Record<string, unknown>) {
+  if (result.error || result.open === false) return result;
+  const step = body.service_named === false
+    ? "The caller hasn't said which service yet: tell the free time(s) and in the same reply ask which service («Ի՞նչ ծառայություն եք ցանկանում՝ կտրվածք, մորուքի մշակում, թե՞ երկուսը միասին։»). Do NOT ask «Գրանցե՞մ» yet and don't book."
+    : "Answer from this result; if a time fits, offer it and ask «Գրանցե՞մ». Then the name, then the phone, then create_booking.";
+  return { ...result, next_step: step };
+}
+
 async function checkAvailability(env: Env, body: Record<string, unknown>) {
+  return nextStep(body, await calendarAnswer(env, body));
+}
+
+async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const settings = await getSettings(env.DB);
   if (!settings.enabled) return DISABLED;
   const services = await getServices(env.DB, true);
@@ -317,9 +333,20 @@ function afternoon(settings: Settings, date: string, min: number | null): number
   return min < hours[0] && min < 12 * 60 && min + 12 * 60 < hours[1] ? min + 12 * 60 : min;
 }
 
-async function createBooking(env: Env, body: Record<string, unknown>) {
+/** Who is calling: the conversation, and the caller's number only when it comes from caller ID (never from the model). */
+type Caller = { phone: string | null; conv: string };
+
+// The caller's own booking: made in this conversation, or under the number they're calling from.
+const ownsBooking = (caller: Caller, b: { phone: string | null; conversation_id: string | null }) =>
+  b.conversation_id === caller.conv || (!!caller.phone && b.phone === caller.phone);
+
+const bookingNumber = (v: unknown) => Number(String(v ?? "").replace(/\D/g, "")) - 1000;
+
+async function createBooking(env: Env, body: Record<string, unknown>, caller: Caller) {
   const settings = await getSettings(env.DB);
   if (!settings.enabled) return DISABLED;
+  if (body.service_named === false) return { success: false, error: "ask_service_first", message: "The caller hasn't said which service: ask «Ի՞նչ ծառայություն եք ցանկանում։» before booking." };
+  if (!cleanText(body.client_name, 60)) return { success: false, error: "ask_name_first", message: "Ask the caller's name first («Ինչպե՞ս է Ձեր անունը։»), then book." };
   const service = resolveServices(await getServices(env.DB, true), body.service_id);
   if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
   const date = body.date;
@@ -327,18 +354,15 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
   if (!isDate(date) || start === null) return { success: false, error: "bad_date_or_time", message: "Use YYYY-MM-DD and HH:MM." };
 
   const phone = normalizePhone(body.phone);
-  const conversationId = cleanText(body.conversation_id, 80);
+  const conversationId = caller.conv;
 
-  // Changing a booking made earlier (e.g. beard trim → haircut + beard): the old one is freed first, so
-  // its own slot counts as free, and put back if the new time doesn't fit. Only the caller's own booking:
-  // the same phone, or made in this same chat.
+  // Changing a booking (e.g. beard trim → haircut + beard, or another time): the old one is freed first, so
+  // its own slot counts as free, and put back if the new time doesn't fit. Only the caller's own booking.
   let replaced: number | null = null;
   if (body.replace_booking_id) {
-    const oldId = Number(String(body.replace_booking_id).replace(/\D/g, "")) - 1000;
-    const old = await env.DB.prepare("SELECT id, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(oldId).first<{ id: number; phone: string | null; conversation_id: string | null }>();
-    if (!old) return { success: false, error: "booking_not_found", message: "No such booking: make a new one, or check the id." };
-    const own = (phone && old.phone === phone) || (conversationId?.startsWith("chat-") && old.conversation_id === conversationId);
-    if (!own) return { success: false, error: "not_your_booking", message: "Pass the same phone as the booking being changed." };
+    const old = await env.DB.prepare("SELECT id, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(bookingNumber(body.replace_booking_id)).first<{ id: number; phone: string | null; conversation_id: string | null }>();
+    if (!old) return { success: false, error: "booking_not_found", message: "No such booking: call find_bookings, or make a new one." };
+    if (!ownsBooking(caller, old)) return { success: false, error: "not_your_booking", message: "Only bookings made in this conversation or under the caller's own number can be changed; offer that the administrator calls back." };
     await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(old.id).run();
     replaced = old.id;
   }
@@ -356,6 +380,38 @@ async function createBooking(env: Env, body: Record<string, unknown>) {
     conversationId,
   });
   return { success: true, booking_id: bookingId, ...(replaced ? { replaced_booking_id: `B-${1000 + replaced}` } : {}), phone_saved: Boolean(phone), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}` };
+}
+
+/** The caller's upcoming bookings: made in this conversation, or under the number they're calling from. */
+async function findBookings(env: Env, caller: Caller) {
+  const today = localNow().date;
+  const { results } = await env.DB.prepare(
+    "SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE status = 'confirmed' AND date >= ? AND (conversation_id = ? OR (? IS NOT NULL AND phone = ?)) ORDER BY date, start_min",
+  ).bind(today, caller.conv, caller.phone, caller.phone).all<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
+  const bookings = results
+    .filter((b) => b.date > today || b.start_min > localNow().minutes)
+    .map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, date: b.date, weekday: weekdayName(b.date), time: toHHMM(b.start_min), time_hy: timeHy(b.start_min), made_in_this_conversation: b.conversation_id === caller.conv }));
+  if (bookings.length) return { bookings };
+  return caller.phone
+    ? { bookings: [], message: "No upcoming bookings under the number they're calling from. If they booked with another number, the administrator will call back." }
+    : { bookings: [], message: "The caller's number is unknown, so bookings from earlier calls can't be looked up: offer that the administrator calls back." };
+}
+
+async function cancelBooking(env: Env, body: Record<string, unknown>, caller: Caller) {
+  const b = await env.DB.prepare("SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(bookingNumber(body.booking_id)).first<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
+  if (!b) return { success: false, error: "booking_not_found", message: "No such booking: call find_bookings first." };
+  if (!ownsBooking(caller, b)) return { success: false, error: "not_your_booking", message: "Only bookings made in this conversation or under the caller's own number can be cancelled; offer that the administrator calls back." };
+  await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(b.id).run();
+  return { success: true, cancelled_booking_id: `B-${1000 + b.id}`, summary: `${b.client_name ?? ""}: ${b.service_name}, ${weekdayName(b.date)} ${b.date} ${toHHMM(b.start_min)} (${timeHy(b.start_min)})` };
+}
+
+/** Runs one of the assistant's tools for the voice call and the chat alike. */
+async function runTool(env: Env, name: string, args: Record<string, unknown>, caller: Caller) {
+  if (name === "check_availability") return checkAvailability(env, args);
+  if (name === "create_booking") return createBooking(env, args, caller);
+  if (name === "find_bookings") return findBookings(env, caller);
+  if (name === "cancel_booking") return cancelBooking(env, args, caller);
+  return { error: "unknown_tool" };
 }
 
 // ---------------------------------------------------------------- speech-to-text
@@ -506,15 +562,16 @@ const REALTIME_TOOLS = [
         part_of_day: { type: "string", enum: ["morning", "afternoon", "evening"], description: "If the caller asked for morning (before 12), afternoon (12-17) or evening (17+)" },
         service_id: { type: "string", description: "Service id from the price list; several for one person joined with + (e.g. haircut+beard_trim+styling). Default haircut." },
         people: { type: "integer", description: "How many people come at the same time (a group). Check with the longest person's services. Default 1." },
-        replace_booking_id: { type: "string", description: "When checking a change to a booking made earlier in this conversation: its booking_id, so its own slot counts as free." },
+        replace_booking_id: { type: "string", description: "When checking a change to one of the caller's bookings (made in this conversation, or found with find_bookings): its booking_id, so its own slot counts as free." },
+        service_named: { type: "boolean", description: "true only if the caller has already said which service(s) they want; false if you're assuming haircut." },
       },
-      required: ["date"],
+      required: ["date", "service_named"],
     },
   },
   {
     type: "function",
     name: "create_booking",
-    description: "Book one person after they agreed to a free time and gave name and phone. For a group, call once per person. To change a booking made earlier in this conversation (add a service, other time), call again with replace_booking_id.",
+    description: "Book one person after they named the service, agreed to a free time and gave their name (and phone on calls). For a group, call once per person. To change one of the caller's bookings (add a service, other time, another person), call with replace_booking_id instead of making a second booking.",
     parameters: {
       type: "object",
       properties: {
@@ -523,10 +580,23 @@ const REALTIME_TOOLS = [
         time: { type: "string", description: "HH:MM" },
         client_name: { type: "string" },
         phone: { type: "string" },
-        replace_booking_id: { type: "string", description: "When the caller changes a booking made earlier (other service or time): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice. Use the same name and phone." },
+        replace_booking_id: { type: "string", description: "When the caller changes one of their bookings (other service, time or person): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice." },
+        service_named: { type: "boolean", description: "true only if the caller said which service(s) they want." },
       },
-      required: ["service_id", "date", "time"],
+      required: ["service_id", "date", "time", "client_name", "service_named"],
     },
+  },
+  {
+    type: "function",
+    name: "find_bookings",
+    description: "The caller's upcoming bookings: made in this conversation, or under the number they're calling from (caller ID). Call when they ask about, want to change or cancel a booking, or say someone isn't coming.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    type: "function",
+    name: "cancel_booking",
+    description: "Cancel one of the caller's bookings (from find_bookings or made in this conversation) after they confirmed which one. For a group, only the person who isn't coming.",
+    parameters: { type: "object", properties: { booking_id: { type: "string", description: "e.g. B-1031" } }, required: ["booking_id"] },
   },
 ];
 
@@ -566,7 +636,7 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
       ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. The _hy words are only for Armenian: in a Russian or English conversation say times in that language (e.g. «в десять», «at ten»). If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
     "Never start a sentence with «Խնդրում եմ».",
-    "Once you booked someone in this conversation, any later change (add a service, another time) is a change of THAT booking: pass its booking_id as replace_booking_id to check_availability and to create_booking (same name and phone), so their own booking doesn't count as taken and they aren't booked twice. Do it yourself; don't send them to the administrator.",
+    "Changing or cancelling: the caller's bookings are those made in this conversation and those find_bookings returns (it finds bookings under the number they're calling from). Change one with replace_booking_id in check_availability and create_booking (never a second booking on top); cancel with cancel_booking. Do it yourself; only if find_bookings finds nothing, the administrator calls back. See phrasebook section 12.",
     "If the calendar result says outside_opening_hours, never say the time is taken («զբաղված»): say when you open and close (opens_hy / closes_hy) and offer the free times — phrasebook line «Outside opening hours».",
     "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
     !voice
@@ -630,7 +700,9 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   });
   const data = (await res.json()) as { value?: string; error?: { message?: string } };
   if (!res.ok || !data.value) return json({ error: data.error?.message ?? `openai ${res.status}` }, 502);
-  return json({ key: data.value, model: "gpt-realtime-2.1" });
+  const conv = `call-${crypto.randomUUID()}`;
+  const callToken = await makeCallToken(env.SESSION_SECRET, { phone: callerPhone, conv }, 3 * 60 * 60 * 1000);
+  return json({ key: data.value, model: "gpt-realtime-2.1", call_token: callToken });
 }
 
 /** Streams Armenian speech (raw 24 kHz 16-bit PCM) for one reply, for the /realtime/ hybrid mode. */
@@ -727,12 +799,8 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
         try {
           args = JSON.parse(call.function.arguments || "{}");
         } catch {}
-        const result =
-          call.function.name === "check_availability"
-            ? await checkAvailability(env, args)
-            : call.function.name === "create_booking"
-              ? await createBooking(env, { ...args, conversation_id: `chat-${chatId}` })
-              : { error: "unknown_tool" };
+        // the chat has no caller ID: only bookings made in this chat are theirs to change
+        const result = await runTool(env, call.function.name, args, { phone: null, conv: `chat-${chatId}` });
         if (call.function.name === "create_booking" && (result as { success?: boolean }).success) booked = true;
         await logLine("event", `${call.function.name} ${JSON.stringify(args)} → ${JSON.stringify(result).slice(0, 600)}`);
         conv.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
@@ -1005,10 +1073,10 @@ export default {
       if (path === "/api/rt-tool" && req.method === "POST") {
         const origin = req.headers.get("origin");
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
-        const { name, args } = (await req.json().catch(() => ({}))) as { name?: string; args?: Record<string, unknown> };
-        if (name === "check_availability") return json(await checkAvailability(env, args ?? {}));
-        if (name === "create_booking") return json(await createBooking(env, { ...(args ?? {}), conversation_id: "realtime" }));
-        return json({ error: "unknown_tool" }, 400);
+        const { name, args, call_token } = (await req.json().catch(() => ({}))) as { name?: string; args?: Record<string, unknown>; call_token?: string };
+        // the call pass from /api/realtime-session says who is calling; without it nothing can be changed
+        const caller = (await readCallToken(env.SESSION_SECRET, call_token)) ?? { phone: null, conv: `anon-${crypto.randomUUID()}` };
+        return json(await runTool(env, name ?? "", args ?? {}, caller));
       }
       if (path === "/api/chat" && req.method === "POST") {
         const origin = req.headers.get("origin");
@@ -1036,7 +1104,7 @@ export default {
         if (req.method !== "POST" || !safeEqual(auth, `Bearer ${env.TOOL_SECRET}`)) return json({ error: "unauthorized" }, 401);
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
         if (path === "/tools/check-availability") return json(await checkAvailability(env, body));
-        if (path === "/tools/create-booking") return json(await createBooking(env, body));
+        if (path === "/tools/create-booking") return json(await createBooking(env, body, { phone: null, conv: cleanText(body.conversation_id, 80) || "elevenlabs" }));
         return json({ error: "not_found" }, 404);
       }
 

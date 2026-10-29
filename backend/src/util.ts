@@ -77,3 +77,26 @@ export async function checkToken(secret: string, token: string): Promise<boolean
   if (!exp || !sig || Number(exp) < Date.now()) return false;
   return safeEqual(sig, await hmac(secret, `admin:${exp}`));
 }
+
+/**
+ * Call pass: "<payload>.<hmac>" naming the caller's number (caller ID) and this conversation. The assistant's
+ * calendar tools trust only this — never a phone number the model passes — when finding, changing or
+ * cancelling someone's bookings, so nobody can touch another person's booking by dictating their number.
+ */
+export async function makeCallToken(secret: string, data: { phone: string | null; conv: string }, ttlMs: number): Promise<string> {
+  const payload = btoa(JSON.stringify({ ...data, exp: Date.now() + ttlMs })).replace(/[+/=]/g, (c) => ({ "+": "-", "/": "_", "=": "" })[c]!);
+  return `${payload}.${await hmac(secret, `call:${payload}`)}`;
+}
+
+export async function readCallToken(secret: string, token: unknown): Promise<{ phone: string | null; conv: string } | null> {
+  if (typeof token !== "string") return null;
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig || !safeEqual(sig, await hmac(secret, `call:${payload}`))) return null;
+  try {
+    const data = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { phone?: string | null; conv?: string; exp?: number };
+    if (!data.conv || !data.exp || data.exp < Date.now()) return null;
+    return { phone: data.phone ?? null, conv: data.conv };
+  } catch {
+    return null;
+  }
+}
