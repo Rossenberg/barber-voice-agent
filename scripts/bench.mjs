@@ -5,6 +5,7 @@
 // phone digits must match exactly, everything else is judged on meaning ("would the assistant act right?").
 //   node scripts/bench.mjs                 (latest bench session)
 //   node scripts/bench.mjs bench-mvtnzxra  (a given one)
+//   ONLY=openai node scripts/bench.mjs     (just OpenAI, e.g. after changing TRANSCRIBE_HINT in index.ts)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -115,21 +116,26 @@ async function judge(p, cands) {
 }
 
 // ---- run
-const NAMES = ["OpenAI", "Gemini", "Both"];
+const ONLY = process.env.ONLY === "openai";
+const NAMES = ONLY ? ["OpenAI"] : ["OpenAI", "Gemini", "Both"];
 const results = [];
 for (const r of rows) {
   const noise = r.turn >= 1000;
   const p = PHRASES.find((x) => x.id === r.turn % 1000);
   const wav = readFileSync(join(OUT, `${r.turn}.wav`));
-  const [o, g] = await Promise.all([timed(() => openai(wav)), timed(() => gemini(wav))]);
-  const b = await timed(() => both(o.text, g.text));
-  b.ms += Math.max(o.ms, g.ms); // waits for both recognizers, then picks
-  const cands = [o, g, b];
+  let cands;
+  if (ONLY) cands = [await timed(() => openai(wav))];
+  else {
+    const [o, g] = await Promise.all([timed(() => openai(wav)), timed(() => gemini(wav))]);
+    const b = await timed(() => both(o.text, g.text));
+    b.ms += Math.max(o.ms, g.ms); // waits for both recognizers, then picks
+    cands = [o, g, b];
+  }
   const verdict = p.digits ? { ok: cands.map((c) => digitsOf(c.text).endsWith(p.digits) || digitsOf(c.text).includes(p.digits)), why: cands.map((c) => `цифры ${digitsOf(c.text) || "—"}`) } : await judge(p, cands.map((c) => c.text));
   results.push({ id: p.id, noise, kind: p.kind, said: p.text, ...Object.fromEntries(NAMES.map((n, i) => [n, { ...cands[i], ok: !!verdict.ok[i], why: verdict.ok[i] ? undefined : verdict.why?.[i] }])) });
   console.log(`${noise ? "🔊" : "  "} #${p.id} ${NAMES.map((n, i) => `${n} ${verdict.ok[i] ? "✓" : "✗"} ${(cands[i].ms / 1000).toFixed(1)}s`).join(" | ")}`);
 }
-writeFileSync(join(OUT, "results.json"), JSON.stringify(results, null, 2));
+writeFileSync(join(OUT, ONLY ? "results-openai.json" : "results.json"), JSON.stringify(results, null, 2));
 
 // ---- summary
 const pct = (list, n) => `${list.filter((x) => x[n].ok).length}/${list.length}`;
@@ -140,4 +146,4 @@ for (const [g, list] of Object.entries(groups)) if (list.length) console.log(`${
 console.log(`${"Скорость (мед.)".padEnd(15)}${NAMES.map((n) => `${med(results, n)} с`.padEnd(10)).join("")}`);
 console.log(`\nОшибки:`);
 for (const x of results) for (const n of NAMES) if (!x[n].ok) console.log(`${x.noise ? "🔊" : "  "} #${x.id} ${n}: «${x[n].text || x[n].error || ""}» — ${x[n].why ?? ""}`);
-console.log(`\nchat cost ≈ $${cost.toFixed(3)} · details in ${join(OUT, "results.json")}`);
+console.log(`\nchat cost ≈ $${cost.toFixed(3)} · details in ${join(OUT, ONLY ? "results-openai.json" : "results.json")}`);

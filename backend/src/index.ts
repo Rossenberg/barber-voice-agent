@@ -581,7 +581,7 @@ async function assistantInstructions(env: Env, opts: { name: string; callerPhone
 }
 
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
-const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, ներկել, վաղը, ժամը։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
+const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց, երևանյան խոսակցական՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, դզել, ֆենով, ներկել, կողքերը, մաշինկայով, էսօր, էգուց, վաղը, մյուս օրը, ժամը, կեսին, ուշ, շուտ, հասցեն, ախպեր ջան, կարա՞մ գամ։ Անուններ՝ Արամ, Արման, Արթուր, Աշոտ, Գևորգ, Գոռ, Դավիթ, Էդգար, Կարեն, Հայկ, Հովհաննես, Մհեր, Նարեկ, Սամվել, Սարգիս, Վահագն, Վահե, Տիգրան, Անի, Աննա, Մարիամ, Լուսինե։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
 
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
