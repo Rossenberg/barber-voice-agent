@@ -45,10 +45,10 @@ export function normalizePhone(s: unknown): string | null {
 
 export const cleanText = (s: unknown, max: number) => (typeof s === "string" ? s.trim().slice(0, max) : "");
 
-export function json(data: unknown, status = 200): Response {
+export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    headers: { "content-type": "application/json", "cache-control": "no-store", ...headers },
   });
 }
 
@@ -60,7 +60,7 @@ export function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function hmac(secret: string, message: string): Promise<string> {
+export async function hmac(secret: string, message: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   return btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/[+/=]/g, (c) => ({ "+": "-", "/": "_", "=": "" })[c]!);
@@ -83,19 +83,19 @@ export async function checkToken(secret: string, token: string): Promise<boolean
  * calendar tools trust only this — never a phone number the model passes — when finding, changing or
  * cancelling someone's bookings, so nobody can touch another person's booking by dictating their number.
  */
-export async function makeCallToken(secret: string, data: { phone: string | null; conv: string }, ttlMs: number): Promise<string> {
+export async function makeCallToken(secret: string, data: { phone: string | null; conv: string; biz: number }, ttlMs: number): Promise<string> {
   const payload = btoa(JSON.stringify({ ...data, exp: Date.now() + ttlMs })).replace(/[+/=]/g, (c) => ({ "+": "-", "/": "_", "=": "" })[c]!);
   return `${payload}.${await hmac(secret, `call:${payload}`)}`;
 }
 
-export async function readCallToken(secret: string, token: unknown): Promise<{ phone: string | null; conv: string } | null> {
+export async function readCallToken(secret: string, token: unknown): Promise<{ phone: string | null; conv: string; biz: number } | null> {
   if (typeof token !== "string") return null;
   const [payload, sig] = token.split(".");
   if (!payload || !sig || !safeEqual(sig, await hmac(secret, `call:${payload}`))) return null;
   try {
-    const data = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { phone?: string | null; conv?: string; exp?: number };
+    const data = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as { phone?: string | null; conv?: string; biz?: number; exp?: number };
     if (!data.conv || !data.exp || data.exp < Date.now()) return null;
-    return { phone: data.phone ?? null, conv: data.conv };
+    return { phone: data.phone ?? null, conv: data.conv, biz: Number(data.biz) || 1 };
   } catch {
     return null;
   }

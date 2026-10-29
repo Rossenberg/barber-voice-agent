@@ -8,6 +8,7 @@ import { createListener } from "/listener.js";
  * @param {"female"|"male"} opts.voice
  * @param {"elevenlabs"|"openai"} [opts.speech] who speaks; "openai" is only for comparison on /realtime/
  * @param {string} [opts.caller] demo caller ID
+ * @param {string} [opts.biz] which business answers (its slug); none = the demo barbershop
  * @param {object} ui
  * @param {(text: string, cls: string) => HTMLElement} ui.add       show a message ("user" | "agent" | "tool")
  * @param {(key: string) => string} ui.t                             text for: tool.check, tool.checked, tool.book, tool.booked, tool.failed, tool.error, voice.error
@@ -15,7 +16,7 @@ import { createListener } from "/listener.js";
  * @param {(el: HTMLElement, ms: number) => void} [ui.latency]       first sound of a reply, ms after the caller stopped
  * @param {(speaking: boolean) => void} [ui.speaking]
  */
-export async function startCall({ voice, speech = "elevenlabs", caller = "" }, ui) {
+export async function startCall({ voice, speech = "elevenlabs", caller = "", biz = "" }, ui) {
   const params = new URLSearchParams(location.search);
   const DEBUG = params.has("debug");
   const actx = new AudioContext(); // created right after the tap so iPhone allows sound
@@ -103,6 +104,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
     form.append("call_id", callId);
     form.append("turn", String(turn));
     form.append("role", role);
+    if (callToken) form.append("call_token", callToken); // tells the log which business the call belongs to
     for (const [k, v] of Object.entries(fields)) if (v !== undefined && v !== null) form.append(k, v);
     fetch("/api/rt-log", { method: "POST", body: form }).catch(() => {});
   }
@@ -355,7 +357,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "" }, u
       manual = !!recorder;
     }
     const extra = ["stt", "effort", "nr"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
-    const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
+    const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${biz ? `&biz=${encodeURIComponent(biz)}` : ""}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
     callToken = sess.call_token ?? "";
     if (!sess.key) throw new Error(sess.error || "no key");
     pc = new RTCPeerConnection();

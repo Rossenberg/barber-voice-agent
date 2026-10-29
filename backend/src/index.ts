@@ -1,4 +1,5 @@
-import PHRASEBOOK from "../../agent/phrasebook-hy.md"; // shared with the ElevenLabs agent (scripts/setup-elevenlabs.mjs)
+import PHRASEBOOK from "../../agent/phrasebook-hy.md";
+import { authApi, currentUser } from "./account"; // shared with the ElevenLabs agent (scripts/setup-elevenlabs.mjs)
 import {
   addDays,
   checkToken,
@@ -30,6 +31,7 @@ interface Env {
   OPENAI_API_KEY: string; // candidate speech-to-text and the Realtime (speech-to-speech) test page
   TELEGRAM_BOT_TOKEN?: string; // call reviews go to the owner's Telegram (optional)
   TELEGRAM_CHAT_ID?: string;
+  RESEND_API_KEY?: string; // cabinet emails: confirm the address, reset the password
 }
 
 interface Settings {
@@ -69,14 +71,28 @@ class HttpError extends Error {
 
 // ---------------------------------------------------------------- data
 
-async function getSettings(db: D1Database): Promise<Settings> {
-  const row = await db.prepare("SELECT data FROM settings WHERE id = 1").first<{ data: string }>();
-  return JSON.parse(row!.data);
+// Every business (barbershop) has its own settings, services, bookings and closed hours. Business 1 is the
+// demo «Blade Barbershop» on the landing page.
+const DEMO_BIZ = 1;
+
+async function getSettings(db: D1Database, biz: number): Promise<Settings> {
+  const row = await db.prepare("SELECT settings FROM businesses WHERE id = ?").bind(biz).first<{ settings: string }>();
+  if (!row) throw new HttpError(404, "business_not_found");
+  return JSON.parse(row.settings);
 }
 
-async function getServices(db: D1Database, activeOnly: boolean): Promise<Service[]> {
-  const sql = `SELECT * FROM services ${activeOnly ? "WHERE active = 1" : ""} ORDER BY sort, name_en`;
-  return (await db.prepare(sql).all<Service>()).results;
+async function getServices(db: D1Database, biz: number, activeOnly: boolean): Promise<Service[]> {
+  const sql = `SELECT * FROM services WHERE business_id = ? ${activeOnly ? "AND active = 1" : ""} ORDER BY sort, name_en`;
+  return (await db.prepare(sql).bind(biz).all<Service>()).results;
+}
+
+/** ?biz=<slug> in public links; none = the demo barbershop. */
+async function bizBySlug(db: D1Database, slug: unknown): Promise<number> {
+  const s = typeof slug === "string" ? slug.trim().toLowerCase() : "";
+  if (!s) return DEMO_BIZ;
+  const row = await db.prepare("SELECT id FROM businesses WHERE slug = ?").bind(s).first<{ id: number }>();
+  if (!row) throw new HttpError(404, "business_not_found");
+  return row.id;
 }
 
 const priceText = (s: Service) => (s.price_max ? `${s.price_min}–${s.price_max} AMD` : `${s.price_min} AMD`);
@@ -104,13 +120,13 @@ function closedReason(settings: Settings, date: string): ClosedReason | null {
 /** Free start times (minutes since midnight) on a date for a service of the given length.
  * `people` > 1: a group coming together needs that many free chairs at the same time. */
 /** ignoreBookingId: the caller's own booking they're changing, so its slot counts as free. */
-async function freeStarts(db: D1Database, settings: Settings, date: string, durationMin: number, people = 1, ignoreBookingId = 0): Promise<number[]> {
+async function freeStarts(db: D1Database, biz: number, settings: Settings, date: string, durationMin: number, people = 1, ignoreBookingId = 0): Promise<number[]> {
   if (closedReason(settings, date)) return [];
   const [open, close] = settings.hours[weekdayOf(date)]!;
-  const { results } = await db
-    .prepare("SELECT start_min, end_min FROM bookings WHERE date = ? AND status = 'confirmed' AND id != ?")
-    .bind(date, ignoreBookingId)
-    .all<{ start_min: number; end_min: number }>();
+  const [{ results }, { results: blocks }] = await db.batch<{ start_min: number; end_min: number }>([
+    db.prepare("SELECT start_min, end_min FROM bookings WHERE business_id = ? AND date = ? AND status = 'confirmed' AND id != ?").bind(biz, date, ignoreBookingId),
+    db.prepare("SELECT start_min, end_min FROM blocks WHERE business_id = ? AND date = ?").bind(biz, date),
+  ]);
 
   const now = localNow();
   const earliest = date === now.date ? now.minutes + MIN_NOTICE_MIN : 0;
@@ -118,6 +134,7 @@ async function freeStarts(db: D1Database, settings: Settings, date: string, dura
   for (let s = Math.ceil(open / GRID_MIN) * GRID_MIN; s + durationMin <= close; s += GRID_MIN) {
     if (s < earliest) continue;
     const e = s + durationMin;
+    if (blocks.some((b) => b.start_min < e && b.end_min > s)) continue; // the owner closed these hours
     if (results.filter((b) => b.start_min < e && b.end_min > s).length + people <= settings.barbers) starts.push(s);
   }
   return starts;
@@ -149,11 +166,11 @@ function spread(starts: number[], max = 6): string[] {
   return Array.from({ length: max }, (_, i) => toHHMM(starts[Math.floor(i * step)]));
 }
 
-async function nextOpenDays(db: D1Database, settings: Settings, date: string, durationMin: number, count = 2) {
+async function nextOpenDays(db: D1Database, biz: number, settings: Settings, date: string, durationMin: number, count = 2) {
   const out: { date: string; weekday: string; times: string[]; times_hy: string[] }[] = [];
   for (let i = 1; i <= 14 && out.length < count; i++) {
     const d = addDays(date, i);
-    const starts = await freeStarts(db, settings, d, durationMin);
+    const starts = await freeStarts(db, biz, settings, d, durationMin);
     if (starts.length) {
       const times = spread(starts, 3);
       out.push({ date: d, weekday: weekdayName(d), times, times_hy: hy(times) });
@@ -220,14 +237,14 @@ function nextStep(body: Record<string, unknown>, result: Record<string, unknown>
   return { ...result, next_step: step };
 }
 
-async function checkAvailability(env: Env, body: Record<string, unknown>) {
-  return nextStep(body, await calendarAnswer(env, body));
+async function checkAvailability(env: Env, body: Record<string, unknown>, biz: number) {
+  return nextStep(body, await calendarAnswer(env, body, biz));
 }
 
-async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const settings = await getSettings(env.DB);
+async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: number): Promise<Record<string, unknown>> {
+  const settings = await getSettings(env.DB, biz);
   if (!settings.enabled) return DISABLED;
-  const services = await getServices(env.DB, true);
+  const services = await getServices(env.DB, biz, true);
   const service = resolveServices(services, body.service_id) ?? findService(services, "haircut") ?? services[0];
   const date = body.date;
   if (!isDate(date)) return { success: false, error: "bad_date", message: "Use YYYY-MM-DD.", today: localNow().date };
@@ -244,16 +261,16 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<
     return { ...base, open: true, error: "too_many_people", message: `Only ${settings.barbers} people can be served at the same time: check them one after the other (people = ${settings.barbers} or 1).` };
   }
   const closed = closedReason(settings, date);
-  if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, settings, date, service.duration_min) };
+  if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, biz, settings, date, service.duration_min) };
 
   const changing = Number(String(body.replace_booking_id ?? "").replace(/\D/g, "")) - 1000;
-  const starts = await freeStarts(env.DB, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
+  const starts = await freeStarts(env.DB, biz, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
   const requested = afternoon(settings, date, parseHHMM(body.time));
   if (requested !== null) {
     // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
     if (date === localNow().date && requested <= localNow().minutes) {
       const tomorrow = addDays(date, 1);
-      const tStarts = await freeStarts(env.DB, settings, tomorrow, service.duration_min);
+      const tStarts = await freeStarts(env.DB, biz, settings, tomorrow, service.duration_min);
       const tFree = tStarts.includes(requested);
       const tNear = tFree ? [] : nearest(tStarts, requested);
       return {
@@ -278,7 +295,7 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<
       requested_time_free: free,
       ...(outside ? { outside_opening_hours: true, opening_hours_that_day: `${toHHMM(openMin)}–${toHHMM(closeMin)}`, opens_hy: timeHy(openMin), closes_hy: timeHy(closeMin) } : {}),
       ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near) }),
-      ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
+      ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
     };
   }
   // "Is there anything tomorrow morning?" — filter by part of day, and say what's free otherwise.
@@ -293,7 +310,7 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<
       free_times_hy: hy(spread(inPart, 4)),
       ...(inPart.length ? {} : { other_free_times_that_day: spread(starts, 3), other_free_times_that_day_hy: hy(spread(starts, 3)) }),
       ...earliestFree(date, starts),
-      ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
+      ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
     };
   }
   return {
@@ -302,7 +319,7 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>): Promise<
     free_times: spread(starts),
     free_times_hy: hy(spread(starts)),
     ...earliestFree(date, starts),
-    ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, settings, date, service.duration_min) }),
+    ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
   };
 }
 
@@ -317,11 +334,11 @@ function earliestFree(date: string, starts: number[]) {
   };
 }
 
-async function insertBooking(env: Env, service: Service, date: string, start: number, fields: { name: string; phone: string | null; source: string; conversationId: string }) {
+async function insertBooking(env: Env, biz: number, service: Service, date: string, start: number, fields: { name: string; phone: string | null; source: string; conversationId: string }) {
   const res = await env.DB.prepare(
-    "INSERT INTO bookings (service_id, service_name, date, start_min, end_min, client_name, phone, source, conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+    "INSERT INTO bookings (business_id, service_id, service_name, date, start_min, end_min, client_name, phone, source, conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
   )
-    .bind(service.id, service.name_hy, date, start, start + service.duration_min, fields.name || null, fields.phone, fields.source, fields.conversationId || null)
+    .bind(biz, service.id, service.name_hy, date, start, start + service.duration_min, fields.name || null, fields.phone, fields.source, fields.conversationId || null)
     .first<{ id: number }>();
   return `B-${1000 + res!.id}`;
 }
@@ -334,7 +351,7 @@ function afternoon(settings: Settings, date: string, min: number | null): number
 }
 
 /** Who is calling: the conversation, and the caller's number only when it comes from caller ID (never from the model). */
-type Caller = { phone: string | null; conv: string };
+type Caller = { phone: string | null; conv: string; biz: number };
 
 // The caller's own booking: made in this conversation, or under the number they're calling from.
 const ownsBooking = (caller: Caller, b: { phone: string | null; conversation_id: string | null }) =>
@@ -343,11 +360,11 @@ const ownsBooking = (caller: Caller, b: { phone: string | null; conversation_id:
 const bookingNumber = (v: unknown) => Number(String(v ?? "").replace(/\D/g, "")) - 1000;
 
 async function createBooking(env: Env, body: Record<string, unknown>, caller: Caller) {
-  const settings = await getSettings(env.DB);
+  const settings = await getSettings(env.DB, caller.biz);
   if (!settings.enabled) return DISABLED;
   if (body.service_named === false) return { success: false, error: "ask_service_first", message: "The caller hasn't said which service: ask «Ի՞նչ ծառայություն եք ցանկանում։» before booking." };
   if (!cleanText(body.client_name, 60)) return { success: false, error: "ask_name_first", message: "Ask the caller's name first («Ինչպե՞ս է Ձեր անունը։»), then book." };
-  const service = resolveServices(await getServices(env.DB, true), body.service_id);
+  const service = resolveServices(await getServices(env.DB, caller.biz, true), body.service_id);
   if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
   const date = body.date;
   const start = isDate(date) ? afternoon(settings, date, parseHHMM(body.time)) : null;
@@ -360,20 +377,20 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
   // its own slot counts as free, and put back if the new time doesn't fit. Only the caller's own booking.
   let replaced: number | null = null;
   if (body.replace_booking_id) {
-    const old = await env.DB.prepare("SELECT id, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(bookingNumber(body.replace_booking_id)).first<{ id: number; phone: string | null; conversation_id: string | null }>();
+    const old = await env.DB.prepare("SELECT id, phone, conversation_id FROM bookings WHERE id = ? AND business_id = ? AND status = 'confirmed'").bind(bookingNumber(body.replace_booking_id), caller.biz).first<{ id: number; phone: string | null; conversation_id: string | null }>();
     if (!old) return { success: false, error: "booking_not_found", message: "No such booking: call find_bookings, or make a new one." };
     if (!ownsBooking(caller, old)) return { success: false, error: "not_your_booking", message: "Only bookings made in this conversation or under the caller's own number can be changed; offer that the administrator calls back." };
     await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(old.id).run();
     replaced = old.id;
   }
 
-  const starts = await freeStarts(env.DB, settings, date, service.duration_min);
+  const starts = await freeStarts(env.DB, caller.biz, settings, date, service.duration_min);
   if (!starts.includes(start)) {
     if (replaced) await env.DB.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").bind(replaced).run();
     const near = nearest(starts, start);
     return { success: false, error: "slot_taken", message: replaced ? "This time is not free; the old booking is kept." : "This time is not free any more.", nearest_free_times: near, nearest_free_times_hy: hy(near) };
   }
-  const bookingId = await insertBooking(env, service, date, start, {
+  const bookingId = await insertBooking(env, caller.biz, service, date, start, {
     name: cleanText(body.client_name, 60),
     phone,
     source: "assistant",
@@ -386,8 +403,8 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
 async function findBookings(env: Env, caller: Caller) {
   const today = localNow().date;
   const { results } = await env.DB.prepare(
-    "SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE status = 'confirmed' AND date >= ? AND (conversation_id = ? OR (? IS NOT NULL AND phone = ?)) ORDER BY date, start_min",
-  ).bind(today, caller.conv, caller.phone, caller.phone).all<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
+    "SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE business_id = ? AND status = 'confirmed' AND date >= ? AND (conversation_id = ? OR (? IS NOT NULL AND phone = ?)) ORDER BY date, start_min",
+  ).bind(caller.biz, today, caller.conv, caller.phone, caller.phone).all<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
   const bookings = results
     .filter((b) => b.date > today || b.start_min > localNow().minutes)
     .map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, date: b.date, weekday: weekdayName(b.date), time: toHHMM(b.start_min), time_hy: timeHy(b.start_min), made_in_this_conversation: b.conversation_id === caller.conv }));
@@ -398,7 +415,7 @@ async function findBookings(env: Env, caller: Caller) {
 }
 
 async function cancelBooking(env: Env, body: Record<string, unknown>, caller: Caller) {
-  const b = await env.DB.prepare("SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE id = ? AND status = 'confirmed'").bind(bookingNumber(body.booking_id)).first<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
+  const b = await env.DB.prepare("SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE id = ? AND business_id = ? AND status = 'confirmed'").bind(bookingNumber(body.booking_id), caller.biz).first<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
   if (!b) return { success: false, error: "booking_not_found", message: "No such booking: call find_bookings first." };
   if (!ownsBooking(caller, b)) return { success: false, error: "not_your_booking", message: "Only bookings made in this conversation or under the caller's own number can be cancelled; offer that the administrator calls back." };
   await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(b.id).run();
@@ -407,7 +424,7 @@ async function cancelBooking(env: Env, body: Record<string, unknown>, caller: Ca
 
 /** Runs one of the assistant's tools for the voice call and the chat alike. */
 async function runTool(env: Env, name: string, args: Record<string, unknown>, caller: Caller) {
-  if (name === "check_availability") return checkAvailability(env, args);
+  if (name === "check_availability") return checkAvailability(env, args, caller.biz);
   if (name === "create_booking") return createBooking(env, args, caller);
   if (name === "find_bookings") return findBookings(env, caller);
   if (name === "cancel_booking") return cancelBooking(env, args, caller);
@@ -604,9 +621,9 @@ const REALTIME_TOOLS = [
  * Instructions shared by the voice assistant (/realtime/) and the website chat, so both think the same way:
  * same phrasebook, calendar rules and price list; only how they talk differs (spoken words vs. chat text).
  */
-async function assistantInstructions(env: Env, opts: { name: string; callerPhone: string | null; channel: "voice" | "chat" }): Promise<string> {
-  const settings = await getSettings(env.DB);
-  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
+async function assistantInstructions(env: Env, opts: { biz: number; name: string; callerPhone: string | null; channel: "voice" | "chat" }): Promise<string> {
+  const settings = await getSettings(env.DB, opts.biz);
+  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, opts.biz, true));
   const { name, callerPhone } = opts;
   const voice = opts.channel === "voice";
   const shop = voice ? settings.shop_name_spoken || settings.shop_name : settings.shop_name;
@@ -668,7 +685,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const manualTurns = params.get("turn") === "manual";
   const nr = params.get("nr"); // test switch: near | far (default off)
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
-  const instructions = await assistantInstructions(env, { name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
+  const biz = await bizBySlug(env.DB, params.get("biz"));
+  const instructions = await assistantInstructions(env, { biz, name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
@@ -701,7 +719,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const data = (await res.json()) as { value?: string; error?: { message?: string } };
   if (!res.ok || !data.value) return json({ error: data.error?.message ?? `openai ${res.status}` }, 502);
   const conv = `call-${crypto.randomUUID()}`;
-  const callToken = await makeCallToken(env.SESSION_SECRET, { phone: callerPhone, conv }, 3 * 60 * 60 * 1000);
+  const callToken = await makeCallToken(env.SESSION_SECRET, { phone: callerPhone, conv, biz }, 3 * 60 * 60 * 1000);
   return json({ key: data.value, model: "gpt-realtime-2.1", call_token: callToken });
 }
 
@@ -735,8 +753,9 @@ async function realtimeLog(env: Env, req: Request, ctx: ExecutionContext): Promi
     audioType = file.type || "application/octet-stream";
   }
   const latency = form.get("latency_ms") === null ? NaN : Number(form.get("latency_ms"));
-  await env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
+  const biz = (await readCallToken(env.SESSION_SECRET, form.get("call_token")))?.biz ?? DEMO_BIZ;
+  await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(biz, callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
     .run();
   // the call just ended: review it now
   if (role === "usage" && String(form.get("text")).includes('"kind":"call"')) {
@@ -758,7 +777,8 @@ const CHAT_MODEL = "gpt-6.1-terra";
 
 /** Website chat: same instructions, phrasebook and calendar tools as the voice assistant, in text. */
 async function chatReply(env: Env, req: Request): Promise<Response> {
-  const body = (await req.json().catch(() => ({}))) as { id?: string; messages?: { role?: string; content?: string }[]; model?: string };
+  const body = (await req.json().catch(() => ({}))) as { id?: string; biz?: string; messages?: { role?: string; content?: string }[]; model?: string };
+  const biz = await bizBySlug(env.DB, body.biz);
   const chatId = cleanText(body.id, 64) || crypto.randomUUID();
   const history = (body.messages ?? [])
     .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
@@ -767,16 +787,16 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
   if (!history.length || history[history.length - 1].role !== "user") return json({ error: "bad_request" }, 400);
   const model = CHAT_MODELS.includes(body.model ?? "") ? body.model! : CHAT_MODEL;
 
-  const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
+  const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { biz, name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
   // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
   // remind the model what it booked here, so a later change replaces that booking instead of failing.
-  const { results: made } = await env.DB.prepare("SELECT id, service_id, date, start_min, client_name FROM bookings WHERE conversation_id = ? AND status = 'confirmed'")
-    .bind(`chat-${chatId}`)
+  const { results: made } = await env.DB.prepare("SELECT id, service_id, date, start_min, client_name FROM bookings WHERE business_id = ? AND conversation_id = ? AND status = 'confirmed'")
+    .bind(biz, `chat-${chatId}`)
     .all<{ id: number; service_id: string; date: string; start_min: number; client_name: string | null }>();
   if (made.length) conv.splice(1, 0, { role: "system", content: `Bookings you made earlier in this chat: ${made.map((b) => `B-${1000 + b.id} ${b.service_id} ${b.date} ${toHHMM(b.start_min)} ${b.client_name ?? ""}`).join("; ")}.` });
   const tools = REALTIME_TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const logLine = (role: string, text: string, ms?: number) =>
-    env.DB.prepare("INSERT INTO realtime_log (call_id, turn, role, text, latency_ms) VALUES (?, ?, ?, ?, ?)").bind(`chat-${chatId}`, history.length, role, text.slice(0, 4000), ms ?? null).run();
+    env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text, latency_ms) VALUES (?, ?, ?, ?, ?, ?)").bind(biz, `chat-${chatId}`, history.length, role, text.slice(0, 4000), ms ?? null).run();
 
   const t0 = Date.now();
   let booked = false;
@@ -800,7 +820,7 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
           args = JSON.parse(call.function.arguments || "{}");
         } catch {}
         // the chat has no caller ID: only bookings made in this chat are theirs to change
-        const result = await runTool(env, call.function.name, args, { phone: null, conv: `chat-${chatId}` });
+        const result = await runTool(env, call.function.name, args, { phone: null, conv: `chat-${chatId}`, biz });
         if (call.function.name === "create_booking" && (result as { success?: boolean }).success) booked = true;
         await logLine("event", `${call.function.name} ${JSON.stringify(args)} → ${JSON.stringify(result).slice(0, 600)}`);
         conv.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
@@ -871,12 +891,124 @@ function validServices(input: unknown): Service[] {
   });
 }
 
-async function adminState(env: Env) {
+/** Everything a business owner manages: shared by the demo dashboard (/dashboard, password) and the cabinet (/app, accounts). */
+async function shopState(env: Env, biz: number) {
   const from = addDays(localNow().date, -7);
-  const { results: bookings } = await env.DB.prepare("SELECT * FROM bookings WHERE date >= ? ORDER BY date, start_min LIMIT 500").bind(from).all();
-  return { settings: await getSettings(env.DB), services: await getServices(env.DB, false), bookings, today: localNow().date };
+  const [{ results: bookings }, { results: blocks }] = await env.DB.batch([
+    env.DB.prepare("SELECT * FROM bookings WHERE business_id = ? AND date >= ? ORDER BY date, start_min LIMIT 1000").bind(biz, from),
+    env.DB.prepare("SELECT * FROM blocks WHERE business_id = ? AND date >= ? ORDER BY date, start_min").bind(biz, from),
+  ]);
+  const b = await env.DB.prepare("SELECT slug, category FROM businesses WHERE id = ?").bind(biz).first<{ slug: string; category: string }>();
+  return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
 }
 
+async function shopApi(env: Env, biz: number, method: string, sub: string, body: Record<string, unknown>): Promise<Response> {
+  if (sub === "state" && method === "GET") return json(await shopState(env, biz));
+
+  if (sub === "settings" && method === "PUT") {
+    const settings = validSettings(body, await getSettings(env.DB, biz));
+    await env.DB.prepare("UPDATE businesses SET settings = ? WHERE id = ?").bind(JSON.stringify(settings), biz).run();
+    return json({ settings });
+  }
+
+  if (sub === "services" && method === "PUT") {
+    const services = validServices(body.services);
+    const insert = env.DB.prepare("INSERT INTO services (business_id, id, category, name_hy, name_en, duration_min, price_min, price_max, active, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM services WHERE business_id = ?").bind(biz),
+      ...services.map((s) => insert.bind(biz, s.id, s.category, s.name_hy, s.name_en, s.duration_min, s.price_min, s.price_max, s.active, s.sort)),
+    ]);
+    return json({ services });
+  }
+
+  if (sub === "bookings" && method === "POST") {
+    const settings = await getSettings(env.DB, biz);
+    const service = findService(await getServices(env.DB, biz, false), body.service_id);
+    const start = parseHHMM(body.time);
+    if (!service || !isDate(body.date) || start === null) throw new HttpError(400, "service, date and time are required");
+    const starts = await freeStarts(env.DB, biz, settings, body.date, service.duration_min);
+    if (!starts.includes(start)) return json({ error: "slot_taken" }, 409);
+    const bookingId = await insertBooking(env, biz, service, body.date, start, {
+      name: cleanText(body.client_name, 60),
+      phone: normalizePhone(body.phone),
+      source: "manual",
+      conversationId: "",
+    });
+    return json({ booking_id: bookingId });
+  }
+
+  const cancel = /^bookings\/(\d+)\/cancel$/.exec(sub);
+  if (cancel && method === "POST") {
+    const res = await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ? AND business_id = ?").bind(Number(cancel[1]), biz).run();
+    return res.meta.changes ? json({ ok: true }) : json({ error: "not_found" }, 404);
+  }
+
+  // Closed hours: a break, a day off. A whole day = from opening to closing.
+  if (sub === "blocks" && method === "POST") {
+    const start = parseHHMM(body.from), end = parseHHMM(body.to);
+    if (!isDate(body.date) || start === null || end === null || start >= end) throw new HttpError(400, "date, from and to are required");
+    const res = await env.DB.prepare("INSERT INTO blocks (business_id, date, start_min, end_min, note) VALUES (?, ?, ?, ?, ?) RETURNING id")
+      .bind(biz, body.date, start, end, cleanText(body.note, 80) || null).first<{ id: number }>();
+    return json({ id: res!.id });
+  }
+  const unblock = /^blocks\/(\d+)\/delete$/.exec(sub);
+  if (unblock && method === "POST") {
+    const res = await env.DB.prepare("DELETE FROM blocks WHERE id = ? AND business_id = ?").bind(Number(unblock[1]), biz).run();
+    return res.meta.changes ? json({ ok: true }) : json({ error: "not_found" }, 404);
+  }
+
+  return json({ error: "not_found" }, 404);
+}
+
+// A new owner's business starts with a typical barbershop price list they then edit (other fields get theirs later).
+const BARBER_TEMPLATE: [string, string, string, string, number, number, number | null][] = [
+  ["haircut", "main", "Կտրվածք", "Стрижка", 30, 10000, null],
+  ["fade_cut", "main", "Ֆեյդ կտրվածք", "Фейд", 30, 10000, null],
+  ["buzz_cut", "main", "Կտրվածք մեքենայով", "Стрижка машинкой", 30, 6000, null],
+  ["beard_trim", "main", "Մորուքի մշակում", "Борода", 30, 6000, null],
+  ["shave", "main", "Սափրում", "Бритьё", 30, 7000, null],
+  ["junior_cut", "main", "Երեխայի կտրվածք", "Детская стрижка", 30, 7000, null],
+  ["styling", "main", "Հարդարում", "Укладка", 30, 4000, null],
+  ["haircut_beard", "combo", "Կտրվածք + մորուքի մշակում", "Стрижка + борода", 60, 16000, null],
+  ["fade_beard", "combo", "Ֆեյդ կտրվածք + մորուքի մշակում", "Фейд + борода", 60, 16000, null],
+  ["beard_tint", "color", "Մորուքի երանգավորում", "Окрашивание бороды", 30, 5000, 7000],
+  ["hair_tint", "color", "Մազերի երանգավորում", "Окрашивание волос", 30, 7000, 9000],
+];
+
+async function newBusiness(env: Env, name: string, category: string): Promise<number> {
+  const slug = `b${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
+  const settings: Settings = {
+    enabled: true,
+    shop_name: name,
+    shop_name_spoken: "",
+    address: "",
+    greeting: "Բարև ձեզ, {shop}, ես {name}ն եմ։ Ինչո՞վ օգնեմ։",
+    barbers: 1,
+    hours: [null, [600, 1200], [600, 1200], [600, 1200], [600, 1200], [600, 1200], [600, 1200]],
+    extra_instructions: "",
+  };
+  const row = await env.DB.prepare("INSERT INTO businesses (slug, category, settings) VALUES (?, ?, ?) RETURNING id").bind(slug, category, JSON.stringify(settings)).first<{ id: number }>();
+  const biz = row!.id;
+  if (category === "barber") {
+    const insert = env.DB.prepare("INSERT INTO services (business_id, id, category, name_hy, name_en, duration_min, price_min, price_max, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    await env.DB.batch(BARBER_TEMPLATE.map(([id, cat, hy, ru, dur, min, max], i) => insert.bind(biz, id, cat, hy, ru, dur, min, max, i * 10)));
+  }
+  return biz;
+}
+
+/** The owner's cabinet (/app): their own business only. */
+async function cabinet(env: Env, req: Request, path: string): Promise<Response> {
+  const user = await currentUser(env, req);
+  if (!user) return json({ error: "unauthorized" }, 401);
+  if (path === "/api/app/me" && req.method === "GET") {
+    const me = await env.DB.prepare("SELECT u.name, u.email, u.lang, b.slug, b.category FROM users u JOIN businesses b ON b.id = u.business_id WHERE u.id = ?").bind(user.id).first();
+    return json(me);
+  }
+  const body = req.method === "GET" ? {} : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
+  return shopApi(env, user.business_id, req.method, path.slice("/api/app/".length), body);
+}
+
+/** The demo barbershop's dashboard (/dashboard): one shared password. */
 async function admin(env: Env, req: Request, path: string): Promise<Response> {
   if (path === "/api/admin/login" && req.method === "POST") {
     const { password } = (await req.json().catch(() => ({}))) as { password?: string };
@@ -890,48 +1022,7 @@ async function admin(env: Env, req: Request, path: string): Promise<Response> {
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!(await checkToken(env.SESSION_SECRET, token))) return json({ error: "unauthorized" }, 401);
   const body = req.method === "GET" ? {} : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
-
-  if (path === "/api/admin/state" && req.method === "GET") return json(await adminState(env));
-
-  if (path === "/api/admin/settings" && req.method === "PUT") {
-    const settings = validSettings(body, await getSettings(env.DB));
-    await env.DB.prepare("UPDATE settings SET data = ?, updated_at = datetime('now') WHERE id = 1").bind(JSON.stringify(settings)).run();
-    return json({ settings });
-  }
-
-  if (path === "/api/admin/services" && req.method === "PUT") {
-    const services = validServices(body.services);
-    const insert = env.DB.prepare("INSERT INTO services (id, category, name_hy, name_en, duration_min, price_min, price_max, active, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM services"),
-      ...services.map((s) => insert.bind(s.id, s.category, s.name_hy, s.name_en, s.duration_min, s.price_min, s.price_max, s.active, s.sort)),
-    ]);
-    return json({ services });
-  }
-
-  if (path === "/api/admin/bookings" && req.method === "POST") {
-    const settings = await getSettings(env.DB);
-    const service = findService(await getServices(env.DB, false), body.service_id);
-    const start = parseHHMM(body.time);
-    if (!service || !isDate(body.date) || start === null) throw new HttpError(400, "service, date and time are required");
-    const starts = await freeStarts(env.DB, settings, body.date, service.duration_min);
-    if (!starts.includes(start)) return json({ error: "slot_taken" }, 409);
-    const bookingId = await insertBooking(env, service, body.date, start, {
-      name: cleanText(body.client_name, 60),
-      phone: normalizePhone(body.phone),
-      source: "manual",
-      conversationId: "",
-    });
-    return json({ booking_id: bookingId });
-  }
-
-  const cancel = /^\/api\/admin\/bookings\/(\d+)\/cancel$/.exec(path);
-  if (cancel && req.method === "POST") {
-    await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(Number(cancel[1])).run();
-    return json({ ok: true });
-  }
-
-  return json({ error: "not_found" }, 404);
+  return shopApi(env, DEMO_BIZ, req.method, path.slice("/api/admin/".length), body);
 }
 
 // ---------------------------------------------------------------- router
@@ -974,13 +1065,14 @@ async function reviewConversation(env: Env, callId: string) {
   // claim it first, so two Worker instances never pay for the same review
   const claim = await env.DB.prepare("INSERT OR IGNORE INTO call_reviews (call_id, model, verdict) VALUES (?, ?, 'pending')").bind(callId, REVIEW_MODEL).run();
   if (!claim.meta.changes) return;
-  const { results: rows } = await env.DB.prepare("SELECT role, text, created_at FROM realtime_log WHERE call_id = ? AND role IN ('user', 'agent', 'event') ORDER BY id")
-    .bind(callId).all<{ role: string; text: string | null; created_at: string }>();
+  const { results: rows } = await env.DB.prepare("SELECT role, text, created_at, business_id FROM realtime_log WHERE call_id = ? AND role IN ('user', 'agent', 'event') ORDER BY id")
+    .bind(callId).all<{ role: string; text: string | null; created_at: string; business_id: number }>();
+  const biz = rows[0]?.business_id ?? DEMO_BIZ;
   const lines = rows
     .filter((r) => r.text && !/^(turns:|data channel|connection |ignored a phrase|error Cancellation)/.test(r.text))
     .map((r) => `${r.role === "user" ? "CALLER" : r.role === "agent" ? "ASSISTANT" : "TOOL"}: ${r.role === "event" ? r.text!.slice(0, 1200) : r.text}`);
-  const settings = await getSettings(env.DB);
-  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, true));
+  const settings = await getSettings(env.DB, biz);
+  const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, biz, true));
   const today = localNow().date;
   const chat = callId.startsWith("chat-");
   const context = `Channel: ${chat ? "website chat (times may be written as digits; it never asks for a phone)" : "phone call"}. Today: ${today} (${weekdayName(today)}), Yerevan. Hours: ${hoursText}.\nPrice list (id | Armenian | English | duration | price):\n${servicesText}`;
@@ -1011,7 +1103,7 @@ async function reviewConversation(env: Env, callId: string) {
   const saved = await env.DB.prepare("UPDATE call_reviews SET verdict = ?, issues = ?, cost_usd = ? WHERE call_id = ? RETURNING id")
     .bind(verdict, JSON.stringify(issues), cost, callId).first<{ id: number }>();
   if (!saved || (verdict !== "minor" && verdict !== "serious")) return;
-  if (await notifyTelegram(env, saved.id, callId, rows[0]?.created_at, verdict, issues)) {
+  if (await notifyTelegram(env, settings.shop_name, saved.id, callId, rows[0]?.created_at, verdict, issues)) {
     await env.DB.prepare("UPDATE call_reviews SET notified = 1 WHERE id = ?").bind(saved.id).run();
   }
 }
@@ -1035,11 +1127,10 @@ async function saveLead(env: Env, req: Request): Promise<Response> {
   return json({ ok: true });
 }
 
-async function notifyTelegram(env: Env, id: number, callId: string, startedAt: string | undefined, verdict: string, issues: { severity?: string; type?: string; quote?: string; problem?: string; fix?: string }[]) {
+async function notifyTelegram(env: Env, shopName: string, id: number, callId: string, startedAt: string | undefined, verdict: string, issues: { severity?: string; type?: string; quote?: string; problem?: string; fix?: string }[]) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return false;
-  const settings = await getSettings(env.DB);
   const when = startedAt ? new Date(startedAt.replace(" ", "T") + "Z").toLocaleString("ru-RU", { timeZone: "Asia/Yerevan", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
-  const head = `${verdict === "serious" ? "🔴" : "🟡"} <b>${escapeHtml(settings.shop_name)}</b> · ${callId.startsWith("chat-") ? "чат" : "звонок"} ${when}`;
+  const head = `${verdict === "serious" ? "🔴" : "🟡"} <b>${escapeHtml(shopName)}</b> · ${callId.startsWith("chat-") ? "чат" : "звонок"} ${when}`;
   const body = issues.slice(0, 6).map((i, n) =>
     `${n + 1}. ${i.type === "language" ? "Язык" : "Логика"}${i.severity === "serious" ? " (серьёзно)" : ""}\n«${escapeHtml(i.quote ?? "")}»\n❌ ${escapeHtml(i.problem ?? "")}\n✅ ${escapeHtml(i.fix ?? "")}`,
   ).join("\n\n");
@@ -1059,8 +1150,9 @@ export default {
     try {
       // Public: what the landing page needs to start a conversation and show prices.
       if (path === "/api/public/config" && req.method === "GET") {
-        const settings = await getSettings(env.DB);
-        const services = await getServices(env.DB, true);
+        const biz = await bizBySlug(env.DB, new URL(req.url).searchParams.get("biz"));
+        const settings = await getSettings(env.DB, biz);
+        const services = await getServices(env.DB, biz, true);
         const { servicesText, hoursText } = promptFacts(settings, services);
         return json({
           enabled: settings.enabled,
@@ -1093,7 +1185,7 @@ export default {
         if (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:"))) return json({ error: "forbidden" }, 403);
         const { name, args, call_token } = (await req.json().catch(() => ({}))) as { name?: string; args?: Record<string, unknown>; call_token?: string };
         // the call pass from /api/realtime-session says who is calling; without it nothing can be changed
-        const caller = (await readCallToken(env.SESSION_SECRET, call_token)) ?? { phone: null, conv: `anon-${crypto.randomUUID()}` };
+        const caller = (await readCallToken(env.SESSION_SECRET, call_token)) ?? { phone: null, conv: `anon-${crypto.randomUUID()}`, biz: DEMO_BIZ };
         return json(await runTool(env, name ?? "", args ?? {}, caller));
       }
       if (path === "/api/chat" && req.method === "POST") {
@@ -1126,12 +1218,19 @@ export default {
         const auth = req.headers.get("authorization") ?? "";
         if (req.method !== "POST" || !safeEqual(auth, `Bearer ${env.TOOL_SECRET}`)) return json({ error: "unauthorized" }, 401);
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-        if (path === "/tools/check-availability") return json(await checkAvailability(env, body));
-        if (path === "/tools/create-booking") return json(await createBooking(env, body, { phone: null, conv: cleanText(body.conversation_id, 80) || "elevenlabs" }));
+        if (path === "/tools/check-availability") return json(await checkAvailability(env, body, DEMO_BIZ));
+        if (path === "/tools/create-booking") return json(await createBooking(env, body, { phone: null, conv: cleanText(body.conversation_id, 80) || "elevenlabs", biz: DEMO_BIZ }));
         return json({ error: "not_found" }, 404);
       }
 
       if (path.startsWith("/api/admin/")) return await admin(env, req, path);
+      if (path.startsWith("/api/auth/") || path.startsWith("/api/app/")) {
+        // cookies ride along on every request to this site: writes must come from our own pages
+        const origin = req.headers.get("origin");
+        if (req.method !== "GET" && (!origin || (origin !== new URL(req.url).origin && !origin.startsWith("http://localhost:")))) return json({ error: "forbidden" }, 403);
+        if (path.startsWith("/api/auth/")) return await authApi(env, req, path, (name, category) => newBusiness(env, name, category));
+        return await cabinet(env, req, path);
+      }
       return json({ error: "not_found" }, 404);
     } catch (err) {
       if (err instanceof HttpError) return json({ error: err.message }, err.status);

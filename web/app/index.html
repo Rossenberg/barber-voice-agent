@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Кабинет — UMNIK</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%23059669'/%3E%3Cpath d='M9 19v-6m4.7 9V10m4.6 12V10M23 19v-6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Armenian:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/landing.css">
+  <link rel="stylesheet" href="/app/cabinet.css">
+</head>
+<body class="cab">
+  <header class="top scrolled">
+    <div class="wrap top-row">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>UMNIK</a>
+      <span class="cab-biz" id="bizName"></span>
+      <div class="top-actions">
+        <div class="langs" id="langs" role="group" aria-label="Language"><button data-lang="hy">ՀԱՅ</button><button data-lang="ru">РУС</button></div>
+        <button class="btn btn-ghost btn-sm" id="logout" hidden data-i18n="logout">Выйти</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <!-- ============ AUTH ============ -->
+  <main class="auth" id="auth" hidden>
+    <div class="auth-card">
+      <div class="auth-tabs" role="tablist">
+        <button role="tab" data-auth="login" aria-selected="true" data-i18n="auth.login">Вход</button>
+        <button role="tab" data-auth="signup" aria-selected="false" data-i18n="auth.signup">Регистрация</button>
+      </div>
+
+      <form class="auth-form" id="loginForm" data-pane="login" novalidate>
+        <h1 data-i18n="login.title">С возвращением</h1>
+        <label class="field"><span>Email</span><input class="input" name="email" type="email" autocomplete="email" required></label>
+        <label class="field"><span data-i18n="f.password">Пароль</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
+        <p class="form-msg" data-msg></p>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="login.go">Войти</button>
+        <button class="link-btn" type="button" data-auth="forgot" data-i18n="login.forgot">Забыли пароль?</button>
+      </form>
+
+      <form class="auth-form" id="signupForm" data-pane="signup" hidden novalidate>
+        <h1 data-i18n="signup.title">Создайте кабинет</h1>
+        <p class="auth-sub" data-i18n="signup.sub">Добавите услуги и часы — и ассистент начнёт отвечать о вашем бизнесе.</p>
+        <label class="field"><span data-i18n="f.name">Ваше имя</span><input class="input" name="name" autocomplete="name" required maxlength="80"></label>
+        <label class="field"><span data-i18n="f.business">Название бизнеса</span><input class="input" name="business" required maxlength="80" placeholder="Blade Barbershop"></label>
+        <label class="field"><span data-i18n="f.category">Сфера</span>
+          <select class="input" name="category">
+            <option value="barber" data-i18n="cat.barber">Барбершоп или салон</option>
+            <option value="dental" disabled data-i18n="cat.dental">Стоматология или клиника — скоро</option>
+            <option value="office" disabled data-i18n="cat.office">Офис или сервис — скоро</option>
+            <option value="food" disabled data-i18n="cat.food">Фастфуд или доставка — скоро</option>
+          </select>
+        </label>
+        <label class="field"><span>Email</span><input class="input" name="email" type="email" autocomplete="email" required></label>
+        <label class="field"><span data-i18n="f.newPassword">Пароль (минимум 8 символов)</span><input class="input" name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="form-msg" data-msg></p>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="signup.go">Зарегистрироваться</button>
+      </form>
+
+      <div class="auth-form" data-pane="sent" hidden>
+        <div class="sent-ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><rect x="5" y="11" width="38" height="27" rx="6" fill="#dcf5e8"/><path d="M7 14l17 13 17-13" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h1 data-i18n="sent.title">Проверьте почту</h1>
+        <p class="auth-sub"><span data-i18n="sent.text">Мы отправили ссылку для подтверждения на</span> <b id="sentTo"></b>. <span data-i18n="sent.spam">Если письма нет — загляните в «Спам».</span></p>
+        <p class="form-msg" data-msg></p>
+        <button class="btn btn-ghost btn-lg" type="button" id="resend" data-i18n="sent.resend">Отправить ещё раз</button>
+        <button class="link-btn" type="button" data-auth="login" data-i18n="back.login">← Ко входу</button>
+      </div>
+
+      <form class="auth-form" id="forgotForm" data-pane="forgot" hidden novalidate>
+        <h1 data-i18n="forgot.title">Восстановить пароль</h1>
+        <p class="auth-sub" data-i18n="forgot.sub">Пришлём ссылку для нового пароля.</p>
+        <label class="field"><span>Email</span><input class="input" name="email" type="email" autocomplete="email" required></label>
+        <p class="form-msg" data-msg></p>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="forgot.go">Отправить ссылку</button>
+        <button class="link-btn" type="button" data-auth="login" data-i18n="back.login">← Ко входу</button>
+      </form>
+
+      <form class="auth-form" id="resetForm" data-pane="reset" hidden novalidate>
+        <h1 data-i18n="reset.title">Новый пароль</h1>
+        <label class="field"><span data-i18n="f.newPassword">Пароль (минимум 8 символов)</span><input class="input" name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="form-msg" data-msg></p>
+        <button class="btn btn-primary btn-lg" type="submit" data-i18n="reset.go">Сохранить и войти</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ============ CABINET ============ -->
+  <main class="wrap cab-main" id="cab" hidden>
+    <h1 class="cab-title" id="cabTitle"></h1>
+    <nav class="cab-tabs" role="tablist">
+      <button role="tab" data-tab="calendar" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span data-i18n="tab.calendar">Календарь</span></button>
+      <button role="tab" data-tab="services" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span data-i18n="tab.services">Услуги</span></button>
+      <button role="tab" data-tab="settings" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><span data-i18n="tab.settings">Настройки</span></button>
+      <button role="tab" data-tab="test" aria-selected="false"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="tab.test">Проверить</span></button>
+    </nav>
+
+    <!-- calendar -->
+    <section class="pane" data-pane="calendar">
+      <div class="days" id="days" role="tablist" aria-label="Days"></div>
+      <div class="day-head">
+        <div><h2 id="dayTitle"></h2><p class="muted" id="dayHours"></p></div>
+        <div class="day-actions">
+          <button class="btn btn-primary btn-sm" id="addBooking"><span>＋</span> <span data-i18n="cal.add">Запись</span></button>
+          <button class="btn btn-ghost btn-sm" id="addBlock" data-i18n="cal.block">Закрыть часы</button>
+        </div>
+      </div>
+      <div class="day-list" id="dayList"></div>
+    </section>
+
+    <!-- services -->
+    <section class="pane" data-pane="services" hidden>
+      <div class="pane-head">
+        <div><h2 data-i18n="srv.title">Услуги и цены</h2><p class="muted" data-i18n="srv.sub">Ассистент называет только эти услуги и цены. Армянское название он произносит клиенту.</p></div>
+        <button class="btn btn-ghost btn-sm" id="addService"><span>＋</span> <span data-i18n="srv.add">Услуга</span></button>
+      </div>
+      <div class="srv-list" id="srvList"></div>
+      <div class="save-bar"><p class="form-msg" id="srvMsg"></p><button class="btn btn-primary btn-lg" id="saveServices" data-i18n="save">Сохранить</button></div>
+    </section>
+
+    <!-- settings -->
+    <section class="pane" data-pane="settings" hidden>
+      <form id="setForm" class="set-form" novalidate>
+        <div class="set-card">
+          <label class="switch-row"><span><b data-i18n="set.enabled">Ассистент отвечает клиентам</b><small data-i18n="set.enabledHint">Выключите — и он вежливо попросит перезвонить позже.</small></span><input type="checkbox" name="enabled" class="switch"></label>
+        </div>
+        <div class="set-card">
+          <h3 data-i18n="set.business">Бизнес</h3>
+          <label class="field"><span data-i18n="set.name">Название</span><input class="input" name="shop_name" maxlength="60"></label>
+          <label class="field"><span data-i18n="set.spoken">Как ассистент произносит название (армянскими буквами)</span><input class="input" name="shop_name_spoken" maxlength="60" placeholder="Բլեյդ բարբեր շոփ"></label>
+          <label class="field"><span data-i18n="set.address">Адрес</span><input class="input" name="address" maxlength="120"></label>
+          <label class="field"><span data-i18n="set.barbers">Сколько клиентов можно принять одновременно (мастеров)</span><input class="input" name="barbers" type="number" min="1" max="20"></label>
+        </div>
+        <div class="set-card">
+          <h3 data-i18n="set.hours">Часы работы</h3>
+          <div class="hours" id="hours"></div>
+        </div>
+        <div class="set-card">
+          <h3 data-i18n="set.extra">Что ещё должен знать ассистент</h3>
+          <label class="field"><span data-i18n="set.extraHint">Парковка, оплата картой, акции — коротко, любым языком.</span><textarea class="input" name="extra_instructions" rows="4" maxlength="1500"></textarea></label>
+        </div>
+        <div class="save-bar"><p class="form-msg" id="setMsg"></p><button class="btn btn-primary btn-lg" type="submit" data-i18n="save">Сохранить</button></div>
+      </form>
+    </section>
+
+    <!-- test -->
+    <section class="pane" data-pane="test" hidden>
+      <div class="test-card">
+        <h2 data-i18n="test.title">Проверьте своего ассистента</h2>
+        <p class="muted" data-i18n="test.sub">Он уже знает ваши услуги, цены и часы. Позвоните или напишите — запись появится в вашем календаре.</p>
+        <div class="test-actions">
+          <a class="btn btn-primary btn-lg" id="tryCall" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="test.call">Позвонить и написать</span></a>
+          <button class="btn btn-ghost btn-lg" id="copyLink" data-i18n="test.copy">Скопировать ссылку</button>
+        </div>
+        <p class="muted small" data-i18n="test.note">Подключение вашего телефонного номера — следующий шаг. Пока проверяйте по этой ссылке.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="cab-loading" id="loading"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
+
+  <!-- add booking / close hours -->
+  <dialog class="lead-dialog" id="dlg">
+    <form class="lead-form" id="dlgForm" novalidate>
+      <button class="lead-close" type="button" data-close aria-label="Close">×</button>
+      <h2 id="dlgTitle"></h2>
+      <div id="dlgFields"></div>
+      <p class="form-msg" data-msg></p>
+      <button class="btn btn-primary btn-lg" type="submit" data-i18n="save">Сохранить</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="/app/cabinet.js"></script>
+</body>
+</html>
