@@ -112,6 +112,10 @@ const errText = (e) => t(`err.${e.message}`) === `err.${e.message}` ? t("err.gen
 
 // ---------------------------------------------------------------- auth
 
+// Sign-up is not open to everyone yet (clients get access another way): only /app/?signup=1 shows it.
+const signupOpen = new URLSearchParams(location.search).has("signup");
+document.querySelector(".auth-tabs").hidden = !signupOpen;
+
 function showAuth(pane) {
   $("loading").hidden = true;
   $("cab").hidden = true;

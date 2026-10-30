@@ -469,3 +469,10 @@ select.input { appearance: none; background: #fff url("data:image/svg+xml,%3Csvg
   .reveal { opacity: 1; transform: none; }
   .rings i { display: none; }
 }
+
+/* narrow phones: the header keeps «Log in» / «Cabinet»; «Connect» is in the hero anyway */
+@media (max-width: 479px) {
+  #connectBtn { display: none; }
+  .top-actions { gap: 8px; }
+  .top-actions .btn-sm { padding: 0 14px; }
+}

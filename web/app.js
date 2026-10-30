@@ -5,7 +5,7 @@ const MAX_CALL_SEC = 240; // matches the agent's max_duration_seconds
 const T = {
   hy: {
     "nav.who": "Ում համար", "nav.demo": "Դեմո", "nav.features": "Հնարավորություններ", "nav.how": "Միացում", "nav.faq": "Հարցեր",
-    "cta.connect": "Միացնել", "cta.connectBiz": "Միացնել բիզնեսը", "cta.callDemo": "Զանգել օգնականին",
+    "cta.connect": "Միացնել", "cta.login": "Մուտք", "cta.cabinet": "Իմ էջը", "cta.connectBiz": "Միացնել բիզնեսը", "cta.callDemo": "Զանգել օգնականին",
     "hero.eyebrow": "ԻԻ ադմինիստրատոր բիզնեսի համար",
     "hero.title": "Ձեր ձեռքերը զբաղված են։ <span class='nw'><em>UMNIK</em>-ը</span> պատասխանում է յուրաքանչյուր հաճախորդի։",
     "hero.sub": "Ընդունում է զանգերն ու հաղորդագրությունները հայերեն և ռուսերեն, ասում է գները և ինքն է գրանցում Ձեր օրացույցում՝ ցերեկը, գիշերը և հանգստյան օրերին։",
@@ -79,7 +79,7 @@ const T = {
   },
   ru: {
     "nav.who": "Для кого", "nav.demo": "Демо", "nav.features": "Возможности", "nav.how": "Подключение", "nav.faq": "Вопросы",
-    "cta.connect": "Подключить", "cta.connectBiz": "Подключить бизнес", "cta.callDemo": "Позвонить ассистенту",
+    "cta.connect": "Подключить", "cta.login": "Войти", "cta.cabinet": "Кабинет", "cta.connectBiz": "Подключить бизнес", "cta.callDemo": "Позвонить ассистенту",
     "hero.eyebrow": "ИИ-администратор для бизнеса",
     "hero.title": "Ваши руки заняты. <em>UMNIK</em> отвечает каждому клиенту.",
     "hero.sub": "Принимает звонки и сообщения на армянском и русском, называет цены и сам записывает в ваш календарь — днём, ночью и в выходные.",
@@ -549,6 +549,15 @@ leadForm.addEventListener("submit", async (e) => {
     $("leadSubmit").disabled = false;
   }
 });
+
+// Already logged in to the cabinet: the header offers «Cabinet» instead of «Log in» + «Connect».
+fetch("/api/app/me", { credentials: "same-origin" }).then((r) => {
+  if (!r.ok) return;
+  $("loginBtn").dataset.i18n = "cta.cabinet";
+  $("loginBtn").textContent = t("cta.cabinet");
+  $("loginBtn").classList.replace("btn-ghost", "btn-primary");
+  $("connectBtn").hidden = true;
+}).catch(() => {});
 
 setVoice(voice);
 applyLang();
