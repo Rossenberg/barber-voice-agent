@@ -25,6 +25,7 @@ const only = process.env.ONLY?.split(",").map(Number);
 const cats = process.env.CAT?.split(",");
 // CHANNEL=chat: the same situations through the website chat (/api/chat) instead of a voice call
 const CHAT = process.env.CHANNEL === "chat";
+const BIZ_SLUG = process.env.BIZ ?? "", BIZ_ID = Number(process.env.BIZ_ID) || 1; // chat mode: which business answers
 // PICK=long:20,service:10 — only the first N situations of each named category
 const pick = process.env.PICK ? Object.fromEntries(process.env.PICK.split(",").map((x) => x.split(":")).map(([c, n]) => [c, Number(n)])) : null;
 const picked = {};
@@ -37,7 +38,7 @@ async function session() {
 }
 const tool = async (token, name, args) => (await fetch(`${SITE}/api/rt-tool`, { method: "POST", headers: { ...ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ name, args, call_token: token }) })).json();
 
-const cfg = await (await fetch(`${SITE}/api/public/config`)).json();
+const cfg = await (await fetch(`${SITE}/api/public/config${process.env.BIZ ? `?biz=${process.env.BIZ}` : ""}`)).json();
 const dayFrom = (n) => { const d = new Date(cfg.today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
 // One situation: make its bookings, replay the earlier turns, send the caller's phrase the way the page does
@@ -130,7 +131,7 @@ let cost = 0, rtCost = 0;
 // A call pass for a chat conversation, signed like the server does, to put "earlier in this chat" bookings in place.
 const b64u = (x) => x.replace(/[+/=]/g, (c) => ({ "+": "-", "/": "_", "=": "" })[c]);
 const chatPass = (conv) => {
-  const p = b64u(Buffer.from(JSON.stringify({ phone: null, conv, biz: 1, exp: Date.now() + 3600e3 })).toString("base64"));
+  const p = b64u(Buffer.from(JSON.stringify({ phone: null, conv, biz: BIZ_ID, exp: Date.now() + 3600e3 })).toString("base64"));
   return `${p}.${b64u(createHmac("sha256", env.SESSION_SECRET).update(`call:${p}`).digest("base64"))}`;
 };
 
@@ -152,7 +153,7 @@ async function askChat(item) {
   log.push(["user", item.q]);
   const t0 = Date.now();
   try {
-    const res = await fetch(`${SITE}/api/chat`, { method: "POST", headers: { ...ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ id, messages }) });
+    const res = await fetch(`${SITE}/api/chat`, { method: "POST", headers: { ...ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ id, biz: BIZ_SLUG, messages }) });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? res.status);
     log.push(["assistant", data.reply]);
@@ -180,7 +181,7 @@ async function grade(item, r) {
           role: "system",
           content: `You grade a phone receptionist AI of a barbershop in Yerevan. Judge ONLY what the assistant did after the caller's LAST phrase (its tool calls and reply).
 ${item.expect ? `What it should do: ${item.expect}\nGrade mainly against this.` : "Good = it understood what the caller really needs (the main question first), answered every part that matters from the tool results, didn't invent facts, and ended with one clear next step."}
-${CHAT ? "This is the website CHAT (text): times may be written as digits; tool calls aren't shown, judge the reply text. In the chat the assistant asks the phone once after the name and can't see bookings from earlier chats or calls.\n" : ""}Always: correct, polite Armenian (Դուք) — or the caller's language if they speak Russian/English; 1–3 short sentences; no invented free times, prices or policies; never «Գրանցե՞մ» or a booking before the service is known; never cancel or change a booking before the caller agreed (unless they clearly asked for exactly that).
+${CHAT ? "This is the website CHAT (text): times may be written as digits; the calendar tool calls aren't shown here but DID happen — assume free times it names come from the calendar unless they contradict the hours. Judge the reply text. In the chat the assistant asks the phone once after the name and can't see bookings from earlier chats or calls.\n" : ""}Always: correct, polite Armenian (Դուք) — or the caller's language if they speak Russian/English; 1–3 short sentences; no invented free times, prices or policies; never «Գրանցե՞մ» or a booking before the service is known; never cancel or change a booking before the caller agreed (unless they clearly asked for exactly that).
 House rules (correct, don't flag): «թրաշ» = beard trim (beard_trim), not a shave; haircut + beard trim = 16 000 AMD, 1 hour. Every service is 30 min, two = 1 h, three = 1.5 h. The assistant knows only the price list, hours and calendar: for anything else «no exact information» + offering the administrator is right. Up to 2 people can be served at once. The caller's bookings from earlier calls are already listed in the assistant's instructions (the "setup" line), so using their booking_id without calling find_bookings is correct. They are found with find_bookings (by caller ID) and changed with replace_booking_id or cancel_booking; the administrator is only for bookings it can't find. «Ձեզ հետ կկապվի» is correct.
 Context: today ${cfg.today}; hours ${cfg.hours_text}; address ${cfg.address}; services ${cfg.services_text}${item.note ? `\nNote: ${item.note}` : ""}
 Answer JSON {"grade":"good"|"weak"|"bad","why":"one short sentence in Russian"}. weak = right idea but missed a part, clumsy Armenian, or too long; bad = did the wrong thing, wrong or invented facts, or ignored the main point.`,

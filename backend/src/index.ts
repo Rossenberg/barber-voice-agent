@@ -870,7 +870,11 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
       console.error("chat", res.status, (await res.text()).slice(0, 300));
       return json({ error: "chat_failed" }, 502);
     }
-    const msg = ((await res.json()) as { choices: { message: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] }).choices[0].message;
+    const data = (await res.json()) as { choices: { message: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]; usage?: { prompt_tokens: number; completion_tokens: number; prompt_tokens_details?: { cached_tokens?: number } } };
+    // what each chat step costs, for the price per conversation
+    if (data.usage) await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text) VALUES (?, ?, ?, 'usage', ?)")
+      .bind(biz, `chat-${chatId}`, history.length, JSON.stringify({ kind: "chat", model, usage: data.usage })).run();
+    const msg = data.choices[0].message;
     if (msg.tool_calls?.length) {
       conv.push(msg);
       for (const call of msg.tool_calls) {
