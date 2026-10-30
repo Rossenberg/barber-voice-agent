@@ -860,12 +860,22 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
   const t0 = Date.now();
   let booked = false;
   for (let round = 0; round < 5; round++) {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    // GPT-6 only allows function tools in chat completions with reasoning off
+    const payload = JSON.stringify({ model, messages: conv, tools, ...(model.startsWith("gpt-6") ? { reasoning_effort: "none" } : {}) });
+    // OpenAI sometimes stalls on one request (a 28-token reply once took 36 s): give up after 10 s and ask again
+    const ask = (ms: number) => fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
-      // GPT-6 only allows function tools in chat completions with reasoning off
-      body: JSON.stringify({ model, messages: conv, tools, ...(model.startsWith("gpt-6") ? { reasoning_effort: "none" } : {}) }),
+      body: payload,
+      signal: AbortSignal.timeout(ms),
     });
+    let res: Response;
+    try {
+      res = await ask(10_000);
+    } catch (err) {
+      console.error("chat slow, retrying", err);
+      res = await ask(20_000);
+    }
     if (!res.ok) {
       console.error("chat", res.status, (await res.text()).slice(0, 300));
       return json({ error: "chat_failed" }, 502);
