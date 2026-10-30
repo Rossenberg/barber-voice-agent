@@ -377,7 +377,8 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
   }
   // the number is saved only after the caller agreed to it (it once booked straight away without asking)
   const phone_ = normalizePhone(body.phone);
-  if (phone_ && body.phone_confirmed !== true && !body.replace_booking_id) {
+  // (in the chat the caller typed the number themselves: nothing to read back)
+  if (phone_ && body.phone_confirmed !== true && !body.replace_booking_id && !caller.conv.startsWith("chat-")) {
     return phone_ === caller.phone
       ? { success: false, error: "confirm_phone_first", message: "Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» and book with phone_confirmed true after they say yes." }
       : { success: false, error: "confirm_phone_first", message: "A dictated number: first read back its last two digits as one number («Համարը վերջանում է ‹ութսունութով›, ճի՞շտ է։»), and book with phone_confirmed true only after they say yes." };
@@ -701,7 +702,7 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
     "Booking flow: check_availability before saying any time is free, answer only from its result (nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free; outside_opening_hours → say the hours, never «զբաղված»), then «Գրանցե՞մ», the name, the phone, create_booking, one-sentence confirmation. Follow next_step in tool results.",
     !voice
-      ? "Phone: in the chat NEVER ask for a phone number — the chat already shows the customer's contact. Ignore the phone steps of the phrasebook: after the name, call create_booking right away without a phone."
+      ? "Phone in the chat: after the name ask once «Գրեք, խնդրեմ, Ձեր հեռախոսահամարը, որ բարբերը կարողանա կապ հաստատել։» and book with the number they wrote (phone_confirmed true — they typed it, no read-back needed). If they don't want to give it, book without a phone. Bookings from earlier chats or calls can't be found here: changes to those go to the administrator."
       : callerPhone
         ? `Caller's phone number (caller ID): ${callerPhone}. Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» — yes → book with ${callerPhone} and ask nothing more about the phone; no → «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits.`
         : "The caller's number is unknown: ask «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits. If they say «this number» / «the one I'm calling from», explain the number isn't visible and ask them to dictate it.",

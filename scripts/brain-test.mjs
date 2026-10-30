@@ -10,6 +10,7 @@
 //   EFFORT=low node scripts/brain-test.mjs       (session reasoning effort)
 //   REGRADE=scripts/bench-out/brain-….json node scripts/brain-test.mjs   (grade saved answers again)
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { createHmac } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CASES } from "./brain-cases.mjs";
@@ -22,6 +23,8 @@ const TEST_PHONE = "+37499000111"; // the test caller's "caller ID"; its booking
 const EFFORT = process.env.EFFORT ?? "";
 const only = process.env.ONLY?.split(",").map(Number);
 const cats = process.env.CAT?.split(",");
+// CHANNEL=chat: the same situations through the website chat (/api/chat) instead of a voice call
+const CHAT = process.env.CHANNEL === "chat";
 // PICK=long:20,service:10 — only the first N situations of each named category
 const pick = process.env.PICK ? Object.fromEntries(process.env.PICK.split(",").map((x) => x.split(":")).map(([c, n]) => [c, Number(n)])) : null;
 const picked = {};
@@ -123,6 +126,43 @@ async function ask(item) {
 const RT = { text_in: 4, cached_in: 0.4, text_out: 24 };
 const GRADER = { model: process.env.GRADER ?? "gpt-6.1-terra", in: 2, cached: 0.2, out: 8 };
 let cost = 0, rtCost = 0;
+
+// A call pass for a chat conversation, signed like the server does, to put "earlier in this chat" bookings in place.
+const b64u = (x) => x.replace(/[+/=]/g, (c) => ({ "+": "-", "/": "_", "=": "" })[c]);
+const chatPass = (conv) => {
+  const p = b64u(Buffer.from(JSON.stringify({ phone: null, conv, biz: 1, exp: Date.now() + 3600e3 })).toString("base64"));
+  return `${p}.${b64u(createHmac("sha256", env.SESSION_SECRET).update(`call:${p}`).digest("base64"))}`;
+};
+
+async function askChat(item) {
+  if ((item.setup ?? []).some((b) => !b.here)) throw new Error("skip: needs caller ID (not in chat)");
+  const id = `test-${Date.now().toString(36)}`;
+  const pass = chatPass(`chat-${id}`);
+  const ids = [];
+  for (const b of item.setup ?? []) {
+    const out = await tool(pass, "create_booking", { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, service_named: true });
+    if (!out.success) throw new Error(`setup ${JSON.stringify(out)}`);
+    ids.push(out.booking_id);
+  }
+  const log = [];
+  if (item.setup?.length) log.push(["setup", item.setup.map((b) => `${b.who}: ${b.service} ${dayFrom(b.day)} ${b.time} (booked earlier in this chat)`).join("; ")]);
+  const messages = [{ role: "assistant", content: "Բարև ձեզ, ես Անին եմ։ Ինչո՞վ օգնեմ։" }];
+  for (const [role, text] of item.before ?? []) { messages.push({ role, content: text }); log.push([role, text]); }
+  messages.push({ role: "user", content: item.q });
+  log.push(["user", item.q]);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${SITE}/api/chat`, { method: "POST", headers: { ...ORIGIN, "content-type": "application/json" }, body: JSON.stringify({ id, messages }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? res.status);
+    log.push(["assistant", data.reply]);
+    if (data.booked) log.push(["tool", "create_booking → success"]);
+    return { reply: data.reply, log, totalMs: Date.now() - t0, firstTextMs: Date.now() - t0, reasoning: 0 };
+  } finally {
+    const left = await tool(pass, "find_bookings", {});
+    for (const b of left.bookings ?? []) await tool(pass, "cancel_booking", { booking_id: b.booking_id });
+  }
+}
 const rtUsage = (u) => {
   const cached = u?.input_token_details?.cached_tokens ?? 0;
   return (((u?.input_tokens ?? 0) - cached) * RT.text_in + cached * RT.cached_in + (u?.output_tokens ?? 0) * RT.text_out) / 1e6;
@@ -140,7 +180,7 @@ async function grade(item, r) {
           role: "system",
           content: `You grade a phone receptionist AI of a barbershop in Yerevan. Judge ONLY what the assistant did after the caller's LAST phrase (its tool calls and reply).
 ${item.expect ? `What it should do: ${item.expect}\nGrade mainly against this.` : "Good = it understood what the caller really needs (the main question first), answered every part that matters from the tool results, didn't invent facts, and ended with one clear next step."}
-Always: correct, polite Armenian (Դուք) — or the caller's language if they speak Russian/English; 1–3 short sentences; no invented free times, prices or policies; never «Գրանցե՞մ» or a booking before the service is known; never cancel or change a booking before the caller agreed (unless they clearly asked for exactly that).
+${CHAT ? "This is the website CHAT (text): times may be written as digits; tool calls aren't shown, judge the reply text. In the chat the assistant asks the phone once after the name and can't see bookings from earlier chats or calls.\n" : ""}Always: correct, polite Armenian (Դուք) — or the caller's language if they speak Russian/English; 1–3 short sentences; no invented free times, prices or policies; never «Գրանցե՞մ» or a booking before the service is known; never cancel or change a booking before the caller agreed (unless they clearly asked for exactly that).
 House rules (correct, don't flag): «թրաշ» = beard trim (beard_trim), not a shave; haircut + beard trim = 16 000 AMD, 1 hour. Every service is 30 min, two = 1 h, three = 1.5 h. The assistant knows only the price list, hours and calendar: for anything else «no exact information» + offering the administrator is right. Up to 2 people can be served at once. The caller's bookings from earlier calls are already listed in the assistant's instructions (the "setup" line), so using their booking_id without calling find_bookings is correct. They are found with find_bookings (by caller ID) and changed with replace_booking_id or cancel_booking; the administrator is only for bookings it can't find. «Ձեզ հետ կկապվի» is correct.
 Context: today ${cfg.today}; hours ${cfg.hours_text}; address ${cfg.address}; services ${cfg.services_text}${item.note ? `\nNote: ${item.note}` : ""}
 Answer JSON {"grade":"good"|"weak"|"bad","why":"one short sentence in Russian"}. weak = right idea but missed a part, clumsy Armenian, or too long; bad = did the wrong thing, wrong or invented facts, or ignored the main point.`,
@@ -175,8 +215,9 @@ for (const item of process.env.REGRADE ? [] : CASES) {
   }
   let r;
   try {
-    r = await ask(item);
+    r = CHAT ? await askChat(item) : await ask(item);
   } catch (e) {
+    if (e.message.startsWith("skip:")) continue;
     console.log(`#${item.id} ERROR ${e.message}`);
     results.push({ id: item.id, cat: item.cat, grade: "error", why: e.message });
     if (/credit|quota/i.test(e.message)) break;
