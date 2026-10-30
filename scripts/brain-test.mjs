@@ -45,14 +45,14 @@ async function ask(item) {
   // "earlier call" bookings first, from another session with the same caller ID: the real call session
   // then finds them when it starts, like it would on the phone
   for (const b of (item.setup ?? []).filter((b) => !b.here)) {
-    const out = await tool((await session()).call_token, "create_booking", { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, service_named: true });
+    const out = await tool((await session()).call_token, "create_booking", { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, phone_confirmed: true, service_named: true });
     if (!out.success) throw new Error(`setup ${b.who} → ${JSON.stringify(out)}`);
     ids.push(out.booking_id);
   }
   const sess = await session();
   for (const [i, b] of (item.setup ?? []).entries()) {
     if (!b.here) continue;
-    const args = { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, service_named: true };
+    const args = { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, phone_confirmed: true, service_named: true };
     const out = await tool(sess.call_token, "create_booking", args);
     if (!out.success) throw new Error(`setup ${JSON.stringify(args)} → ${JSON.stringify(out)}`);
     ids.push(out.booking_id);

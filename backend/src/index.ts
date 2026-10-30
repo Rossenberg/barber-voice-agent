@@ -371,9 +371,16 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
   if (!settings.enabled) return DISABLED;
   if (body.service_named === false) return { success: false, error: "ask_service_first", message: "The caller hasn't said which service: ask «Ի՞նչ ծառայություն եք ցանկանում։» before booking." };
   if (!cleanText(body.client_name, 60)) return { success: false, error: "ask_name_first", message: "Ask the caller's name first («Ի՞նչ է Ձեր անունը։»), then book." };
-  const dictated = normalizePhone(body.phone);
-  if (dictated && dictated !== caller.phone && body.phone_confirmed !== true) {
-    return { success: false, error: "confirm_phone_first", message: "A dictated number: first read back its last two digits as one number («Համարը վերջանում է ‹ութսունութով›, ճի՞շտ է։»), and book with phone_confirmed true only after they say yes." };
+  // «Անի ջան, …» is the caller talking to the assistant, not their name (it once booked a caller as «Անի»)
+  if (/^(անի|արամ)$/i.test(cleanText(body.client_name, 60)) && body.same_name_as_assistant !== true) {
+    return { success: false, error: "ask_name_first", message: "That is YOUR name — callers address you with it («Անի ջան»). Ask «Ի՞նչ է Ձեր անունը։». Only if the caller said their own name is the same, book with same_name_as_assistant true." };
+  }
+  // the number is saved only after the caller agreed to it (it once booked straight away without asking)
+  const phone_ = normalizePhone(body.phone);
+  if (phone_ && body.phone_confirmed !== true && !body.replace_booking_id) {
+    return phone_ === caller.phone
+      ? { success: false, error: "confirm_phone_first", message: "Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» and book with phone_confirmed true after they say yes." }
+      : { success: false, error: "confirm_phone_first", message: "A dictated number: first read back its last two digits as one number («Համարը վերջանում է ‹ութսունութով›, ճի՞շտ է։»), and book with phone_confirmed true only after they say yes." };
   }
   const service = resolveServices(await getServices(env.DB, caller.biz, true), body.service_id);
   if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
@@ -625,7 +632,8 @@ const REALTIME_TOOLS = [
         phone: { type: "string" },
         replace_booking_id: { type: "string", description: "When the caller changes one of their bookings (other service, time or person): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice." },
         service_named: { type: "boolean", description: "true only if the caller said which service(s) they want." },
-        phone_confirmed: { type: "boolean", description: "For a number the caller dictated (not the one they're calling from): true only after you read back its last two digits and they said yes." },
+        phone_confirmed: { type: "boolean", description: "true only after the caller agreed to this number: their own number → they said yes to «Գրանցե՞մ այն համարով, որից զանգում եք։»; a dictated one → they confirmed its last two digits." },
+        same_name_as_assistant: { type: "boolean", description: "Only if the caller said their own name is Անի / Արամ (the same as yours)." },
       },
       required: ["service_id", "date", "time", "client_name", "service_named"],
     },
