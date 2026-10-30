@@ -38,8 +38,12 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   // noise for speech and kept listening, and its mic pause after each reply swallowed a quick «հա».
   // OpenAI's semantic VAD is only the fallback if Silero fails to load.
   let manual = false, inPhrase = false, phraseTimer = null, holdTimer = null, micOn = true, lastAgentText = "";
-  let skipText = false, toolInResponse = false, owed = false; // a reply dropped because the caller kept talking
+  let skipText = false, toolInResponse = false, owed = false, retriedFailed = false; // a reply dropped because the caller kept talking
   const hasWords = (s) => /\p{L}/u.test(s ?? "");
+  // On silence or noise the recognizer sometimes returns its own vocabulary hint as if the caller said it:
+  // treat that as no words at all.
+  const HINT_ECHO = /Զանգ վարսավիրանոց|Անուններ՝|Հեռախոսահամարը թվերով|երևանյան խոսակցական/;
+  const realWords = (s) => hasWords(s) && !HINT_ECHO.test(s);
   const send = (obj) => dc?.readyState === "open" && dc.send(JSON.stringify(obj));
 
   function requestResponse() {
@@ -87,6 +91,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
 
   // The phrase is over: hand the audio to OpenAI and wait for its transcript.
   function phraseEnded() {
+    retriedFailed = false;
     clearTimeout(phraseTimer);
     clearTimeout(holdTimer);
     holdTimer = null;
@@ -218,7 +223,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
       case "conversation.item.input_audio_transcription.completed": {
         const text = ev.transcript?.trim() ?? "";
         if (ev.usage) usage({ kind: "transcribe", usage: ev.usage });
-        if (!hasWords(text)) {
+        if (!realWords(text)) {
           // just noise: ignore it, don't interrupt or answer
           clearTimeout(pendingTurn);
           pendingTurn = null;
@@ -304,6 +309,19 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
       case "response.done":
         responseActive = false;
         if (ev.response?.usage) usage({ kind: "openai", usage: ev.response.usage });
+        // OpenAI sometimes fails a response outright (seen in quick test series): try once more instead of going quiet
+        // out of OpenAI credit: retrying won't help — tell the page, don't sit in silence
+        if (ev.response?.status === "failed" && /insufficient_quota|credit_balance/.test(JSON.stringify(ev.response.status_details ?? {}))) {
+          log("event", { text: "error insufficient_quota: OpenAI credit exhausted" });
+          ui.state("quota");
+          break;
+        }
+        if (ev.response?.status === "failed" && !retriedFailed) {
+          retriedFailed = true;
+          log("event", { text: `response failed, retrying: ${JSON.stringify(ev.response.status_details ?? {}).slice(0, 200)}` });
+          setTimeout(requestResponse, 600);
+          break;
+        }
         if (toolOutputs.length) {
           const outs = toolOutputs;
           toolOutputs = [];
@@ -380,7 +398,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     dc.onclose = () => log("event", { text: "data channel closed" });
     dc.onmessage = onEvent;
     // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
-    const cfg = await (await fetch("/api/public/config", { cache: "no-store" })).json();
+    const cfg = await (await fetch(`/api/public/config${biz ? `?biz=${encodeURIComponent(biz)}` : ""}`, { cache: "no-store" })).json();
     if (!cfg.enabled) throw new Error("disabled");
     const greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
     dc.onopen = () => {

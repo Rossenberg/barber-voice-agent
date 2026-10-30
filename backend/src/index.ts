@@ -265,7 +265,8 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
 
   const changing = Number(String(body.replace_booking_id ?? "").replace(/\D/g, "")) - 1000;
   const starts = await freeStarts(env.DB, biz, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
-  const requested = afternoon(settings, date, parseHHMM(body.time));
+  // «առավոտյան ութին» is 8 in the morning: don't read it as the evening
+  const requested = body.part_of_day === "morning" ? parseHHMM(body.time) : afternoon(settings, date, parseHHMM(body.time));
   if (requested !== null) {
     // "At 11" asked late in the day: say it has passed and look at the same time tomorrow.
     if (date === localNow().date && requested <= localNow().minutes) {
@@ -363,7 +364,11 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
   const settings = await getSettings(env.DB, caller.biz);
   if (!settings.enabled) return DISABLED;
   if (body.service_named === false) return { success: false, error: "ask_service_first", message: "The caller hasn't said which service: ask «Ի՞նչ ծառայություն եք ցանկանում։» before booking." };
-  if (!cleanText(body.client_name, 60)) return { success: false, error: "ask_name_first", message: "Ask the caller's name first («Ինչպե՞ս է Ձեր անունը։»), then book." };
+  if (!cleanText(body.client_name, 60)) return { success: false, error: "ask_name_first", message: "Ask the caller's name first («Ի՞նչ է Ձեր անունը։»), then book." };
+  const dictated = normalizePhone(body.phone);
+  if (dictated && dictated !== caller.phone && body.phone_confirmed !== true) {
+    return { success: false, error: "confirm_phone_first", message: "A dictated number: first read back its last two digits as one number («Համարը վերջանում է ‹ութսունութով›, ճի՞շտ է։»), and book with phone_confirmed true only after they say yes." };
+  }
   const service = resolveServices(await getServices(env.DB, caller.biz, true), body.service_id);
   if (!service) return { success: false, error: "unknown_service", message: "Use service ids from the price list (several joined with +)." };
   const date = body.date;
@@ -408,7 +413,7 @@ async function findBookings(env: Env, caller: Caller) {
   const bookings = results
     .filter((b) => b.date > today || b.start_min > localNow().minutes)
     .map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, date: b.date, weekday: weekdayName(b.date), time: toHHMM(b.start_min), time_hy: timeHy(b.start_min), made_in_this_conversation: b.conversation_id === caller.conv }));
-  if (bookings.length) return { bookings };
+  if (bookings.length) return { bookings, next_step: "Now answer the caller in one or two sentences: name the booking they mean and do what they asked (another time → check it with replace_booking_id and ask «Փոխե՞մ»; cancel → «Չեղարկե՞մ …» unless they already clearly asked to cancel exactly that one)." };
   return caller.phone
     ? { bookings: [], message: "No upcoming bookings under the number they're calling from. If they booked with another number, the administrator will call back." }
     : { bookings: [], message: "The caller's number is unknown, so bookings from earlier calls can't be looked up: offer that the administrator calls back." };
@@ -419,7 +424,7 @@ async function cancelBooking(env: Env, body: Record<string, unknown>, caller: Ca
   if (!b) return { success: false, error: "booking_not_found", message: "No such booking: call find_bookings first." };
   if (!ownsBooking(caller, b)) return { success: false, error: "not_your_booking", message: "Only bookings made in this conversation or under the caller's own number can be cancelled; offer that the administrator calls back." };
   await env.DB.prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?").bind(b.id).run();
-  return { success: true, cancelled_booking_id: `B-${1000 + b.id}`, summary: `${b.client_name ?? ""}: ${b.service_name}, ${weekdayName(b.date)} ${b.date} ${toHHMM(b.start_min)} (${timeHy(b.start_min)})` };
+  return { success: true, cancelled_booking_id: `B-${1000 + b.id}`, next_step: "Tell the caller now in one sentence: «Չեղարկեցի ‹…›ի գրանցումը։» (and which booking stays, if any).", summary: `${b.client_name ?? ""}: ${b.service_name}, ${weekdayName(b.date)} ${b.date} ${toHHMM(b.start_min)} (${timeHy(b.start_min)})` };
 }
 
 /** Runs one of the assistant's tools for the voice call and the chat alike. */
@@ -599,6 +604,7 @@ const REALTIME_TOOLS = [
         phone: { type: "string" },
         replace_booking_id: { type: "string", description: "When the caller changes one of their bookings (other service, time or person): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice." },
         service_named: { type: "boolean", description: "true only if the caller said which service(s) they want." },
+        phone_confirmed: { type: "boolean", description: "For a number the caller dictated (not the one they're calling from): true only after you read back its last two digits and they said yes." },
       },
       required: ["service_id", "date", "time", "client_name", "service_named"],
     },
@@ -621,16 +627,29 @@ const REALTIME_TOOLS = [
  * Instructions shared by the voice assistant (/realtime/) and the website chat, so both think the same way:
  * same phrasebook, calendar rules and price list; only how they talk differs (spoken words vs. chat text).
  */
-async function assistantInstructions(env: Env, opts: { biz: number; name: string; callerPhone: string | null; channel: "voice" | "chat" }): Promise<string> {
+async function assistantInstructions(env: Env, opts: { biz: number; name: string; callerPhone: string | null; channel: "voice" | "chat"; conv?: string }): Promise<string> {
   const settings = await getSettings(env.DB, opts.biz);
   const { servicesText, hoursText } = promptFacts(settings, await getServices(env.DB, opts.biz, true));
+  // The caller's bookings are looked up before the call starts: in tests the model often forgot to search
+  // when someone said «my friend isn't coming» or «drop the beard», and asked for the day again instead.
+  let bookingsLine = "";
+  if (opts.callerPhone && opts.conv) {
+    const { bookings } = await findBookings(env, { phone: opts.callerPhone, conv: opts.conv, biz: opts.biz });
+    bookingsLine = bookings.length
+      ? `The caller's upcoming bookings (found by their number; use these booking_id values directly with replace_booking_id or cancel_booking, no need to call find_bookings): ${bookings.map((b) => `${b.booking_id} ${b.name ?? ""}: ${b.service}, ${b.weekday} ${b.date} ${b.time} («${b.time_hy}»)`).join("; ")}. When they mention their booking, a friend's booking, being late, changing or cancelling, it's one of these.`
+      : "The caller has no upcoming bookings under the number they're calling from: if they say they're booked, it was under another number — the administrator will call back.";
+  }
+  const address = settings.address.trim();
   const { name, callerPhone } = opts;
   const voice = opts.channel === "voice";
   const shop = voice ? settings.shop_name_spoken || settings.shop_name : settings.shop_name;
   return [
     voice
-      ? `Your name is ${name}. You answer the phone for the barbershop called exactly «${shop}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`
-      : `Your name is ${name}. You answer the website chat of the barbershop called exactly «${shop}» in Yerevan${settings.address ? ` (${settings.address})` : ""}. Never change, translate or invent the barbershop's name.`,
+      ? `Your name is ${name}. You answer the phone for the barbershop called exactly «${shop}». Never change, translate or invent the barbershop's name.`
+      : `Your name is ${name}. You answer the website chat of the barbershop called exactly «${shop}». Never change, translate or invent the barbershop's name.`,
+    address
+      ? `Address — when asked: «Մեր հասցեն է՝ ${address}։» exactly, nothing more (no building, landmark, floor or directions you weren't given). Anything else about getting there (parking, metro, traffic): «Այդ մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։»`
+      : "The address isn't filled in: if asked, «Հասցեի մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։» Never invent one.",
     voice ? "The page has already greeted the caller, so don't greet again; answer what they say." : "The chat already showed a greeting, so don't greet again; answer what they write.",
     "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
     "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
@@ -662,13 +681,16 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
         ? `Caller's phone number (caller ID): ${callerPhone}. Ask «Գրանցե՞մ այն համարով, որից զանգում եք։» — yes → book with ${callerPhone} and ask nothing more about the phone; no → «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits.`
         : "The caller's number is unknown: ask «Ասեք Ձեր հեռախոսահամարը։» and repeat the last two digits. If they say «this number» / «the one I'm calling from», explain the number isn't visible and ask them to dictate it.",
     `Today: ${localNow().date} (${weekdayName(localNow().date)}), now ${toHHMM(localNow().minutes)} Yerevan time. Opening hours: ${hoursText}.`,
+    // a ready list, so «November 2nd», «next Tuesday» or «the 5th» are looked up instead of counted
+    `Next days (date, weekday, open or closed): ${Array.from({ length: 22 }, (_, i) => { const d = addDays(localNow().date, i); return `${d} ${weekdayName(d)}${settings.hours[weekdayOf(d)] ? "" : " closed"}`; }).join("; ")}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
+    bookingsLine,
     settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
   ].filter(Boolean).join("\n");
 }
 
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
-const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց, երևանյան խոսակցական՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, դզել, ֆենով, ներկել, կողքերը, մաշինկայով, էսօր, էգուց, վաղը, մյուս օրը, ժամը, կեսին, ուշ, շուտ, հասցեն, ախպեր ջան, կարա՞մ գամ։ Անուններ՝ Արամ, Արման, Արթուր, Աշոտ, Գևորգ, Գոռ, Դավիթ, Էդգար, Կարեն, Հայկ, Հովհաննես, Մհեր, Նարեկ, Սամվել, Սարգիս, Վահագն, Վահե, Տիգրան, Անի, Աննա, Մարիամ, Լուսինե։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
+const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց, երևանյան խոսակցական՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, դզել, ֆենով, ներկել, ներկում, կողքերը, մաշինկայով, էսօր, էգուց, վաղը, մյուս օրը, ժամը, կեսին, ուշ, շուտ, առավոտյան, իրիկունը, գիշերը, հասցեն, ախպեր ջան, կարա՞մ գամ։ Անուններ՝ Արամ, Արման, Արթուր, Աշոտ, Գևորգ, Գոռ, Դավիթ, Էդգար, Կարեն, Հայկ, Հովհաննես, Մհեր, Նարեկ, Սամվել, Սարգիս, Վահագն, Վահե, Տիգրան, Անի, Աննա, Մարիամ, Լուսինե։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
 
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -686,7 +708,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const nr = params.get("nr"); // test switch: near | far (default off)
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const biz = await bizBySlug(env.DB, params.get("biz"));
-  const instructions = await assistantInstructions(env, { biz, name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice" });
+  const conv = `call-${crypto.randomUUID()}`;
+  const instructions = await assistantInstructions(env, { biz, name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice", conv });
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
@@ -718,7 +741,6 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   });
   const data = (await res.json()) as { value?: string; error?: { message?: string } };
   if (!res.ok || !data.value) return json({ error: data.error?.message ?? `openai ${res.status}` }, 502);
-  const conv = `call-${crypto.randomUUID()}`;
   const callToken = await makeCallToken(env.SESSION_SECRET, { phone: callerPhone, conv, biz }, 3 * 60 * 60 * 1000);
   return json({ key: data.value, model: "gpt-realtime-2.1", call_token: callToken });
 }
@@ -737,6 +759,8 @@ async function ttsStream(env: Env, req: Request): Promise<Response> {
   if (!res.ok || !res.body) return json({ error: `tts ${res.status} ${(await res.text()).slice(0, 200)}` }, 502);
   return new Response(res.body, { headers: { "content-type": "audio/pcm", "cache-control": "no-store" } });
 }
+
+let lastQuotaAlert = 0;
 
 /** Stores one /realtime/ event: a transcript line, an assistant reply, or the audio of a caller's phrase. */
 async function realtimeLog(env: Env, req: Request, ctx: ExecutionContext): Promise<Response> {
@@ -757,6 +781,15 @@ async function realtimeLog(env: Env, req: Request, ctx: ExecutionContext): Promi
   await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text, latency_ms, audio, audio_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(biz, callId, turn, role, cleanText(form.get("text"), 4000) || null, Number.isFinite(latency) ? latency : null, audio, audioType)
     .run();
+  // OpenAI ran out of credit mid-call: the owner must know right away (at most once an hour per Worker instance)
+  if (role === "event" && String(form.get("text")).includes("insufficient_quota") && Date.now() - lastQuotaAlert > 3600_000 && env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
+    lastQuotaAlert = Date.now();
+    ctx.waitUntil(fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: "🔴 Закончились деньги на OpenAI: ассистент не может отвечать на звонки и чат. Пополните баланс: https://platform.openai.com/settings/organization/billing" }),
+    }).catch(() => {}));
+  }
   // the call just ended: review it now
   if (role === "usage" && String(form.get("text")).includes('"kind":"call"')) {
     ctx.waitUntil(

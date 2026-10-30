@@ -308,7 +308,7 @@ const callText = (key) =>
     "voice.error": t("label.error"),
   })[key] ?? key;
 
-const CALL_STATES = { connected: "label.connected", hearing: "label.listening", answering: "label.hearing", listening: "label.listening", unstable: "label.error", failed: "label.error" };
+const CALL_STATES = { connected: "label.connected", hearing: "label.listening", answering: "label.hearing", listening: "label.listening", unstable: "label.error", failed: "label.error", quota: "label.quota" };
 
 async function start() {
   if (conversation || connecting) return;
@@ -332,6 +332,7 @@ async function start() {
         state: (s) => {
           setLabel(CALL_STATES[s] ?? "label.listening");
           if (s === "failed") stopCall("label.error");
+          if (s === "quota") stopCall("label.quota");
         },
         speaking: (on) => {
           orb.dataset.mode = on ? "speaking" : "listening";

@@ -6,6 +6,7 @@
 //   node scripts/brain-test.mjs                  (all)
 //   CAT=group,change node scripts/brain-test.mjs (some categories)
 //   ONLY=201,202 node scripts/brain-test.mjs
+//   PICK=long:20,group:14 node scripts/brain-test.mjs   (first N of each category)
 //   EFFORT=low node scripts/brain-test.mjs       (session reasoning effort)
 //   REGRADE=scripts/bench-out/brain-….json node scripts/brain-test.mjs   (grade saved answers again)
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -21,6 +22,9 @@ const TEST_PHONE = "+37499000111"; // the test caller's "caller ID"; its booking
 const EFFORT = process.env.EFFORT ?? "";
 const only = process.env.ONLY?.split(",").map(Number);
 const cats = process.env.CAT?.split(",");
+// PICK=long:20,service:10 — only the first N situations of each named category
+const pick = process.env.PICK ? Object.fromEntries(process.env.PICK.split(",").map((x) => x.split(":")).map(([c, n]) => [c, Number(n)])) : null;
+const picked = {};
 
 async function session() {
   const res = await fetch(`${SITE}/api/realtime-session?voice=male&speech=elevenlabs&turn=manual&caller=${encodeURIComponent(TEST_PHONE)}${EFFORT ? `&effort=${EFFORT}` : ""}`, { method: "POST", headers: ORIGIN });
@@ -36,13 +40,20 @@ const dayFrom = (n) => { const d = new Date(cfg.today + "T00:00:00Z"); d.setUTCD
 // One situation: make its bookings, replay the earlier turns, send the caller's phrase the way the page does
 // (the phrase + the recognizer's transcript as a system note), run tools until the model answers.
 async function ask(item) {
-  const sess = await session();
   const ids = []; // every booking to cancel afterwards
   const items = []; // conversation items to replay
+  // "earlier call" bookings first, from another session with the same caller ID: the real call session
+  // then finds them when it starts, like it would on the phone
+  for (const b of (item.setup ?? []).filter((b) => !b.here)) {
+    const out = await tool((await session()).call_token, "create_booking", { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, service_named: true });
+    if (!out.success) throw new Error(`setup ${b.who} → ${JSON.stringify(out)}`);
+    ids.push(out.booking_id);
+  }
+  const sess = await session();
   for (const [i, b] of (item.setup ?? []).entries()) {
+    if (!b.here) continue;
     const args = { service_id: b.service, date: dayFrom(b.day), time: b.time, client_name: b.who, phone: TEST_PHONE, service_named: true };
-    // "earlier call" bookings come from another session with the same caller ID; "here" ones from this call
-    const out = await tool(b.here ? sess.call_token : (await session()).call_token, "create_booking", args);
+    const out = await tool(sess.call_token, "create_booking", args);
     if (!out.success) throw new Error(`setup ${JSON.stringify(args)} → ${JSON.stringify(out)}`);
     ids.push(out.booking_id);
     if (b.here) {
@@ -53,7 +64,7 @@ async function ask(item) {
   const ws = new WebSocket("wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1", ["realtime", `openai-insecure-api-key.${sess.key}`]);
   const send = (o) => ws.send(JSON.stringify(o));
   const log = [];
-  let firstTextMs = null, t0 = 0, reasoning = 0;
+  let firstTextMs = null, t0 = 0, reasoning = 0, retried = false;
   await new Promise((ok, fail) => { ws.onopen = ok; ws.onerror = (e) => fail(new Error("ws " + (e.message ?? "error"))); });
   try {
     return await new Promise((resolve, reject) => {
@@ -65,6 +76,9 @@ async function ask(item) {
         if (ev.type === "response.output_text.delta" && firstTextMs === null) firstTextMs = Date.now() - t0;
         if (ev.type === "response.output_text.done") { texts.push(ev.text); log.push(["assistant", ev.text]); }
         if (ev.type === "response.done") {
+          if (ev.response.status !== "completed") log.push(["status", `${ev.response.status} ${JSON.stringify(ev.response.status_details ?? {}).slice(0, 300)}`]);
+          // same as the call page: one retry when OpenAI fails a response
+          if (ev.response.status === "failed" && !retried) { retried = true; setTimeout(() => send({ type: "response.create" }), 600); return; }
           reasoning += ev.response.usage?.output_token_details?.reasoning_tokens ?? 0;
           const calls = (ev.response.output ?? []).filter((o) => o.type === "function_call");
           if (calls.length) {
@@ -145,6 +159,10 @@ if (process.env.REGRADE) {
 for (const item of process.env.REGRADE ? [] : CASES) {
   if (only && !only.includes(item.id)) continue;
   if (cats && !cats.includes(item.cat)) continue;
+  if (pick) {
+    if (!(item.cat in pick) || (picked[item.cat] ?? 0) >= pick[item.cat]) continue;
+    picked[item.cat] = (picked[item.cat] ?? 0) + 1;
+  }
   let r;
   try {
     r = await ask(item);
