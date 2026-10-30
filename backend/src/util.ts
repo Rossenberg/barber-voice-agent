@@ -33,12 +33,17 @@ export function parseHHMM(s: unknown): number | null {
   return hh < 24 && mm < 60 ? hh * 60 + mm : null;
 }
 
-/** Normalizes to +<digits>. Accepts Armenian local format 0XXXXXXXX. */
+/**
+ * Normalizes to +<digits>. Armenian numbers come in many shapes: 99272277, 099272277, 37499272277,
+ * +37499272277, 00374 99 27 22 77, +374 099 27 22 77 — all become +37499272277.
+ */
 export function normalizePhone(s: unknown): string | null {
   if (typeof s !== "string") return null;
   let digits = s.replace(/[^\d+]/g, "");
   if (digits.startsWith("00")) digits = "+" + digits.slice(2);
+  if (/^\d{8}$/.test(digits)) digits = "+374" + digits; // without the leading 0
   if (/^0\d{8}$/.test(digits)) digits = "+374" + digits.slice(1);
+  if (/^\+?3740\d{8}$/.test(digits)) digits = "+374" + digits.replace(/^\+?3740/, ""); // country code + local 0
   if (/^374\d{8}$/.test(digits)) digits = "+" + digits;
   return /^\+\d{8,15}$/.test(digits) ? digits : null;
 }
