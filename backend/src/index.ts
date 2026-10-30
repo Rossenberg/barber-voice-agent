@@ -375,6 +375,13 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
   if (/^(անի|արամ)$/i.test(cleanText(body.client_name, 60)) && body.same_name_as_assistant !== true) {
     return { success: false, error: "ask_name_first", message: "That is YOUR name — callers address you with it («Անի ջան»). Ask «Ի՞նչ է Ձեր անունը։». Only if the caller said their own name is the same, book with same_name_as_assistant true." };
   }
+  // a number that isn't a phone number (one digit too many) used to be dropped silently and the booking made
+  // without a phone — the model then blamed «a technical problem»
+  const rawPhone = typeof body.phone === "string" ? body.phone.trim() : "";
+  if (rawPhone && !normalizePhone(rawPhone)) {
+    const digits = rawPhone.replace(/\D/g, "").length;
+    return { success: false, error: "invalid_phone", message: `«${rawPhone}» isn't a valid number (${digits} digits; an Armenian mobile is 0 + 8 digits, e.g. 099 12 34 56). Nothing was booked yet: ask them to check it — «Համարը կարծես սխալ է՝ ${digits} թիվ է։ Կգրե՞ք (կասե՞ք) կրկին։» — then book.` };
+  }
   // the number is saved only after the caller agreed to it (it once booked straight away without asking)
   const phone_ = normalizePhone(body.phone);
   // (in the chat the caller typed the number themselves: nothing to read back)
