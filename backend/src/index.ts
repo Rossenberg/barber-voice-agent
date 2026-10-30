@@ -982,8 +982,89 @@ async function shopState(env: Env, biz: number) {
   return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
 }
 
+/**
+ * The owner's numbers for a period: bookings, clients, money, busy hours and days, services, loyal clients,
+ * what the assistant brought in. Money is counted at today's price-list prices (a range → its middle).
+ */
+async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown) {
+  const today = localNow().date;
+  const to = isDate(toRaw) ? toRaw : today;
+  const from = isDate(fromRaw) && fromRaw <= to ? fromRaw : addDays(to, -29);
+  const settings = await getSettings(env.DB, biz);
+  const services = await getServices(env.DB, biz, false);
+  type B = { id: number; service_id: string; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; status: string; source: string; conversation_id: string | null; created_at: string };
+  const [{ results: rows }, { results: earlier }, { results: convs }] = await env.DB.batch([
+    env.DB.prepare("SELECT id, service_id, service_name, date, start_min, client_name, phone, status, source, conversation_id, created_at FROM bookings WHERE business_id = ? AND date BETWEEN ? AND ?").bind(biz, from, to),
+    // clients seen before the period: everyone else in it is new
+    env.DB.prepare("SELECT DISTINCT COALESCE(phone, client_name) AS k FROM bookings WHERE business_id = ? AND date < ? AND status = 'confirmed'").bind(biz, from),
+    env.DB.prepare("SELECT call_id, MIN(created_at) AS at, SUM(role = 'user') AS turns, MAX(CASE WHEN role = 'usage' AND text LIKE '%\"kind\":\"call\"%' THEN CAST(json_extract(text, '$.seconds') AS INTEGER) END) AS seconds FROM realtime_log WHERE business_id = ? AND created_at >= ? AND created_at < ? GROUP BY call_id HAVING turns > 0").bind(biz, `${addDays(from, 0)} 00:00:00`, `${addDays(to, 1)} 04:00:00`),
+  ]) as unknown as [{ results: B[] }, { results: { k: string }[] }, { results: { call_id: string; at: string; turns: number; seconds: number | null }[] }];
+
+  const priceOf = (id: string) => { const s = resolveServices(services, id); return s ? (s.price_max ? Math.round((s.price_min + s.price_max) / 2) : s.price_min) : 0; };
+  const nameOf = (b: B) => { const s = resolveServices(services, b.service_id); return s?.name_hy ?? b.service_name; };
+  const ok = rows.filter((b) => b.status === "confirmed");
+  const done = ok.filter((b) => b.date < today || (b.date === today && b.start_min < localNow().minutes));
+  const key = (b: B) => b.phone || b.client_name || `#${b.id}`;
+  const seenBefore = new Set(earlier.map((e) => e.k));
+
+  const clients = new Map<string, { name: string | null; phone: string | null; visits: number; spent: number; last: string }>();
+  for (const b of ok) {
+    const c = clients.get(key(b)) ?? { name: b.client_name, phone: b.phone, visits: 0, spent: 0, last: b.date };
+    c.visits++;
+    c.spent += priceOf(b.service_id);
+    if (b.date > c.last) c.last = b.date;
+    clients.set(key(b), c);
+  }
+  const byHour = Array(24).fill(0), byWeekday = Array(7).fill(0);
+  for (const b of ok) { byHour[Math.floor(b.start_min / 60)]++; byWeekday[weekdayOf(b.date)]++; }
+  const byDay: { date: string; bookings: number; revenue: number }[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const day = ok.filter((b) => b.date === d);
+    byDay.push({ date: d, bookings: day.length, revenue: day.reduce((t, b) => t + priceOf(b.service_id), 0) });
+    if (byDay.length > 400) break;
+  }
+  const svc = new Map<string, { name: string; count: number; revenue: number }>();
+  for (const b of ok) {
+    const s = svc.get(b.service_id) ?? { name: nameOf(b), count: 0, revenue: 0 };
+    s.count++; s.revenue += priceOf(b.service_id);
+    svc.set(b.service_id, s);
+  }
+  // booked by the assistant while the shop was closed (evening, night, a day off) — calls nobody would have taken
+  const yerevan = (utc: string) => new Date(Date.parse(utc.replace(" ", "T") + "Z") + 4 * 3600_000);
+  const afterHours = ok.filter((b) => {
+    if (b.source === "manual") return false;
+    const t = yerevan(b.created_at), h = settings.hours[t.getUTCDay()], m = t.getUTCHours() * 60 + t.getUTCMinutes();
+    return !h || m < h[0] || m >= h[1];
+  }).length;
+  const channel = (b: B) => b.source === "manual" ? "manual" : b.conversation_id?.startsWith("chat-") ? "chat" : "call";
+  const calls = convs.filter((c) => !c.call_id.startsWith("chat-"));
+
+  return {
+    from, to, today,
+    bookings: ok.length,
+    completed: done.length,
+    upcoming: ok.length - done.length,
+    cancelled: rows.length - ok.length,
+    revenue: done.reduce((t, b) => t + priceOf(b.service_id), 0),
+    expected: ok.filter((b) => !done.includes(b)).reduce((t, b) => t + priceOf(b.service_id), 0),
+    avg_check: ok.length ? Math.round(ok.reduce((t, b) => t + priceOf(b.service_id), 0) / ok.length) : 0,
+    clients: clients.size,
+    new_clients: [...clients.keys()].filter((k) => !seenBefore.has(k)).length,
+    returning_clients: [...clients.values()].filter((c) => c.visits >= 2).length,
+    by_hour: byHour,
+    by_weekday: byWeekday,
+    by_day: byDay,
+    services: [...svc.values()].sort((a, b) => b.count - a.count),
+    top_clients: [...clients.values()].sort((a, b) => b.visits - a.visits || b.spent - a.spent).slice(0, 10),
+    channels: { call: ok.filter((b) => channel(b) === "call").length, chat: ok.filter((b) => channel(b) === "chat").length, manual: ok.filter((b) => channel(b) === "manual").length },
+    after_hours: afterHours,
+    conversations: { calls: calls.length, chats: convs.length - calls.length, call_minutes: Math.round(calls.reduce((t, c) => t + (c.seconds ?? 0), 0) / 60) },
+  };
+}
+
 async function shopApi(env: Env, biz: number, method: string, sub: string, body: Record<string, unknown>): Promise<Response> {
   if (sub === "state" && method === "GET") return json(await shopState(env, biz));
+  if (sub === "analytics" && method === "GET") return json(await analytics(env, biz, body.from, body.to));
 
   if (sub === "settings" && method === "PUT") {
     const settings = validSettings(body, await getSettings(env.DB, biz));
@@ -1084,7 +1165,7 @@ async function cabinet(env: Env, req: Request, path: string): Promise<Response> 
     const me = await env.DB.prepare("SELECT u.name, u.email, u.lang, b.slug, b.category FROM users u JOIN businesses b ON b.id = u.business_id WHERE u.id = ?").bind(user.id).first();
     return json(me);
   }
-  const body = req.method === "GET" ? {} : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
+  const body = req.method === "GET" ? Object.fromEntries(new URL(req.url).searchParams) : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
   return shopApi(env, user.business_id, req.method, path.slice("/api/app/".length), body);
 }
 
@@ -1101,7 +1182,7 @@ async function admin(env: Env, req: Request, path: string): Promise<Response> {
 
   const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!(await checkToken(env.SESSION_SECRET, token))) return json({ error: "unauthorized" }, 401);
-  const body = req.method === "GET" ? {} : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
+  const body = req.method === "GET" ? Object.fromEntries(new URL(req.url).searchParams) : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
   return shopApi(env, DEMO_BIZ, req.method, path.slice("/api/admin/".length), body);
 }
 

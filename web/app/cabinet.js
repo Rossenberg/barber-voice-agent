@@ -16,7 +16,15 @@ const T = {
     "err.email_not_verified": "Почта ещё не подтверждена. Мы можем отправить письмо ещё раз.", "err.link_expired": "Ссылка устарела. Запросите новую.",
     "err.slot_taken": "Это время уже занято.", "err.email_failed": "Не удалось отправить письмо. Попробуйте ещё раз через минуту.", "err.network": "Нет связи с сервером. Попробуйте ещё раз.", "err.generic": "Что-то пошло не так. Попробуйте ещё раз.",
     "verify.ok": "Почта подтверждена. Добро пожаловать!", "verify.failed": "Ссылка подтверждения устарела. Войдите, чтобы получить новую.",
-    "tab.calendar": "Календарь", "tab.services": "Услуги", "tab.settings": "Настройки", "tab.test": "Проверить",
+    "tab.calendar": "Календарь", "tab.services": "Услуги", "tab.settings": "Настройки", "tab.test": "Проверить", "tab.stats": "Аналитика",
+    "st.today": "Сегодня", "st.7": "7 дней", "st.30": "30 дней", "st.month": "Этот месяц", "st.90": "3 месяца",
+    "k.revenue": "Заработано", "k.revenueHint": "за прошедшие визиты", "k.expected": "ещё ожидается", "k.bookings": "Записей", "k.cancelled": "отмен",
+    "k.clients": "Клиентов", "k.new": "новых", "k.returning": "Пришли повторно", "k.returningHint": "2 и более визита", "k.avg": "Средний чек",
+    "k.after": "Записи в нерабочее время", "k.afterHint": "их принял ассистент, когда вы были закрыты", "k.conv": "Разговоров ассистента", "k.convHint": "звонков · чатов · минут",
+    "ch.day": "Записи по дням", "ch.dayHint": "наведите на столбик, чтобы увидеть число", "ch.hour": "Самые активные часы", "ch.weekday": "Самые активные дни",
+    "ch.services": "Популярные услуги", "ch.channels": "Откуда записи", "ch.call": "Звонок", "ch.chat": "Чат", "ch.manual": "Вручную",
+    "ch.clients": "Постоянные клиенты", "ch.client": "Клиент", "ch.visits": "Визитов", "ch.spent": "Сумма",
+    "st.peak": "Пик:", "st.empty": "За этот период записей нет.", "st.note": "Суммы — по текущим ценам вашего прайса.", "bookingsWord": "зап.",
     "cal.add": "Запись", "cal.block": "Закрыть часы", "cal.closedDay": "Выходной", "cal.empty": "Записей пока нет", "cal.emptyHint": "Записи ассистента появятся здесь сами.",
     "cal.closed": "Закрыто", "cal.manual": "вручную", "cal.cancelled": "отменена", "cal.cancelAsk": "Отменить запись?", "cal.unblockAsk": "Открыть эти часы снова?",
     "cal.today": "Сегодня", "cal.tomorrow": "Завтра",
@@ -49,7 +57,15 @@ const T = {
     "err.email_not_verified": "Էլ. փոստը դեռ հաստատված չէ։ Կարող ենք նամակը կրկին ուղարկել։", "err.link_expired": "Հղումը հնացել է։ Խնդրեք նորը։",
     "err.slot_taken": "Այս ժամն արդեն զբաղված է։", "err.email_failed": "Չհաջողվեց ուղարկել նամակը։ Փորձեք կրկին մեկ րոպեից։", "err.network": "Սերվերի հետ կապ չկա։ Փորձեք կրկին։", "err.generic": "Ինչ-որ բան սխալ գնաց։ Փորձեք կրկին։",
     "verify.ok": "Էլ. փոստը հաստատված է։ Բարի գալուստ։", "verify.failed": "Հաստատման հղումը հնացել է։ Մուտք գործեք՝ նորը ստանալու համար։",
-    "tab.calendar": "Օրացույց", "tab.services": "Ծառայություններ", "tab.settings": "Կարգավորումներ", "tab.test": "Ստուգել",
+    "tab.calendar": "Օրացույց", "tab.services": "Ծառայություններ", "tab.settings": "Կարգավորումներ", "tab.test": "Ստուգել", "tab.stats": "Վերլուծություն",
+    "st.today": "Այսօր", "st.7": "7 օր", "st.30": "30 օր", "st.month": "Այս ամիս", "st.90": "3 ամիս",
+    "k.revenue": "Վաստակ", "k.revenueHint": "անցած այցերից", "k.expected": "դեռ սպասվում է", "k.bookings": "Գրանցումներ", "k.cancelled": "չեղարկված",
+    "k.clients": "Հաճախորդներ", "k.new": "նոր", "k.returning": "Կրկին եկել են", "k.returningHint": "2 և ավելի այց", "k.avg": "Միջին չեկ",
+    "k.after": "Գրանցումներ ոչ աշխատանքային ժամին", "k.afterHint": "դրանք ընդունել է օգնականը, երբ փակ էիք", "k.conv": "Օգնականի զրույցներ", "k.convHint": "զանգ · չատ · րոպե",
+    "ch.day": "Գրանցումներ ըստ օրերի", "ch.dayHint": "սյան վրա պահեք՝ թիվը տեսնելու համար", "ch.hour": "Ամենաակտիվ ժամերը", "ch.weekday": "Ամենաակտիվ օրերը",
+    "ch.services": "Հայտնի ծառայություններ", "ch.channels": "Որտեղից են գրանցումները", "ch.call": "Զանգ", "ch.chat": "Չատ", "ch.manual": "Ձեռքով",
+    "ch.clients": "Մշտական հաճախորդներ", "ch.client": "Հաճախորդ", "ch.visits": "Այց", "ch.spent": "Գումար",
+    "st.peak": "Գագաթ՝", "st.empty": "Այս ժամանակահատվածում գրանցումներ չկան։", "st.note": "Գումարները՝ Ձեր գնացուցակի ընթացիկ գներով։", "bookingsWord": "գրանց.",
     "cal.add": "Գրանցում", "cal.block": "Փակել ժամերը", "cal.closedDay": "Հանգստյան օր", "cal.empty": "Գրանցումներ դեռ չկան", "cal.emptyHint": "Օգնականի գրանցումներն ինքնաբերաբար կհայտնվեն այստեղ։",
     "cal.closed": "Փակ է", "cal.manual": "ձեռքով", "cal.cancelled": "չեղարկված", "cal.cancelAsk": "Չեղարկե՞լ գրանցումը", "cal.unblockAsk": "Կրկին բացե՞լ այս ժամերը",
     "cal.today": "Այսօր", "cal.tomorrow": "Վաղը",
@@ -85,7 +101,7 @@ function applyLang() {
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
   document.querySelectorAll("#langs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   document.title = `${lang === "hy" ? "Անձնական էջ" : "Кабинет"} — UMNIK`;
-  if (state) render();
+  if (state) { render(); if (statsData) renderStats(); }
 }
 
 function toast(text, err = false) {
@@ -228,6 +244,7 @@ document.querySelectorAll(".cab-tabs button").forEach((b) => b.addEventListener(
   document.querySelectorAll(".cab-tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
   document.querySelectorAll("#cab .pane").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
   if (b.dataset.tab === "calendar") reload().catch(() => {});
+  if (b.dataset.tab === "stats") loadStats();
 }));
 
 const hoursOf = (d) => state.settings.hours[weekday(d)];
@@ -427,3 +444,89 @@ if (q.get("verify")) {
   history.replaceState(null, "", "/app/");
 }
 boot();
+
+// ---------------------------------------------------------------- analytics
+
+const money = (n) => `${Math.round(n).toLocaleString("ru-RU").replace(/\u00a0/g, " ")} ֏`;
+let statsRange = { from: null, to: null }, statsData = null;
+
+function rangeFor(kind) {
+  const today = state.today;
+  if (kind === "today") return { from: today, to: today };
+  if (kind === "month") return { from: today.slice(0, 8) + "01", to: today };
+  return { from: addDays(today, -(Number(kind) - 1)), to: today };
+}
+
+async function loadStats() {
+  if (!statsRange.from) statsRange = rangeFor("30");
+  $("stFrom").value = statsRange.from;
+  $("stTo").value = statsRange.to;
+  try {
+    statsData = await api(`/api/app/analytics?from=${statsRange.from}&to=${statsRange.to}`);
+    renderStats();
+  } catch (e) { toast(errText(e), true); }
+}
+
+// one bar chart: a single series in the brand green, hover shows the exact value
+function bars(values, labels, tipOf) {
+  const max = Math.max(...values, 1), peak = values.indexOf(Math.max(...values));
+  return `<div class="bars">${values.map((v, i) => `<div class="bar${v ? "" : " zero"}${v && i === peak ? " peak" : ""}" tabindex="0"><span class="tip">${esc(tipOf(i, v))}</span><i style="height:${Math.max(2, (v / max) * 100)}%"></i></div>`).join("")}</div>
+    <div class="bar-labels">${labels.map((l) => `<span>${esc(l)}</span>`).join("")}</div>`;
+}
+
+function renderStats() {
+  const d = statsData;
+  if (!d) return;
+  const box = $("stats");
+  if (!d.bookings && !d.cancelled) {
+    box.innerHTML = `<div class="empty"><b>${esc(t("st.empty"))}</b></div>`;
+    return;
+  }
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  const wd = order.map((i) => d.by_weekday[i]);
+  const hours = state.settings.hours.filter(Boolean);
+  const hFrom = Math.floor(Math.min(...hours.map((h) => h[0]), 600) / 60), hTo = Math.ceil(Math.max(...hours.map((h) => h[1]), 1200) / 60);
+  const hourVals = d.by_hour.slice(hFrom, hTo);
+  const peakDay = order[wd.indexOf(Math.max(...wd))], peakHour = hFrom + hourVals.indexOf(Math.max(...hourVals));
+  const days = d.by_day.length > 62 ? null : d.by_day;
+  const sMax = Math.max(...d.services.map((x) => x.count), 1);
+  const chTotal = d.channels.call + d.channels.chat + d.channels.manual || 1;
+  const short = (date) => `${Number(date.slice(8))}.${date.slice(5, 7)}`;
+  box.innerHTML = `
+    <div class="kpis">
+      <div class="kpi hero"><small>${esc(t("k.revenue"))} · ${esc(t("k.revenueHint"))}</small><b>${money(d.revenue)}</b><span>+ ${money(d.expected)} ${esc(t("k.expected"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.bookings"))}</small><b>${d.bookings}</b><span>${d.cancelled} ${esc(t("k.cancelled"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.clients"))}</small><b>${d.clients}</b><span>${d.new_clients} ${esc(t("k.new"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.returning"))}</small><b>${d.returning_clients}</b><span>${esc(t("k.returningHint"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.avg"))}</small><b>${money(d.avg_check)}</b></div>
+      <div class="kpi"><small>${esc(t("k.after"))}</small><b>${d.after_hours}</b><span>${esc(t("k.afterHint"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.conv"))}</small><b>${d.conversations.calls + d.conversations.chats}</b><span>${d.conversations.calls} · ${d.conversations.chats} · ${d.conversations.call_minutes} ${esc(t("k.convHint").split(" · ").pop())}</span></div>
+    </div>
+    ${d.bookings ? `<div class="insight">📈 ${esc(t("st.peak"))} ${esc(t("daysLong")[peakDay])}, ${String(peakHour).padStart(2, "0")}:00–${String(peakHour + 1).padStart(2, "0")}:00</div>` : ""}
+    ${days ? `<div class="chart-card"><h3>${esc(t("ch.day"))}</h3><p>${esc(t("ch.dayHint"))}</p>${bars(days.map((x) => x.bookings), days.map((x, i) => (days.length <= 10 || i % Math.ceil(days.length / 8) === 0 ? short(x.date) : "")), (i, v) => `${short(days[i].date)}: ${v} ${t("bookingsWord")} · ${money(days[i].revenue)}`)}</div>` : ""}
+    <div class="stats-grid">
+      <div class="chart-card"><h3>${esc(t("ch.hour"))}</h3><p>&nbsp;</p>${bars(hourVals, hourVals.map((_, i) => String(hFrom + i)), (i, v) => `${hFrom + i}:00–${hFrom + i + 1}:00 · ${v} ${t("bookingsWord")}`)}</div>
+      <div class="chart-card"><h3>${esc(t("ch.weekday"))}</h3><p>&nbsp;</p>${bars(wd, order.map((i) => t("days")[i]), (i, v) => `${t("daysLong")[order[i]]} · ${v} ${t("bookingsWord")}`)}</div>
+    </div>
+    <div class="stats-grid">
+      <div class="chart-card"><h3>${esc(t("ch.services"))}</h3><p>&nbsp;</p>${d.services.slice(0, 8).map((x) => `<div class="hbar"><span class="nm">${esc(x.name)}</span><span class="val">${x.count} · ${money(x.revenue)}</span><span class="track"><i style="width:${(x.count / sMax) * 100}%"></i></span></div>`).join("")}</div>
+      <div class="chart-card"><h3>${esc(t("ch.channels"))}</h3><p>&nbsp;</p>${[["call", d.channels.call], ["chat", d.channels.chat], ["manual", d.channels.manual]].map(([k, v]) => `<div class="hbar"><span class="nm">${esc(t("ch." + k))}</span><span class="val">${v} · ${Math.round((v / chTotal) * 100)}%</span><span class="track"><i style="width:${(v / chTotal) * 100}%"></i></span></div>`).join("")}</div>
+    </div>
+    <div class="chart-card"><h3>${esc(t("ch.clients"))}</h3><p>&nbsp;</p>
+      <table class="clients-table"><thead><tr><th>${esc(t("ch.client"))}</th><th>${esc(t("ch.visits"))}</th><th>${esc(t("ch.spent"))}</th></tr></thead>
+      <tbody>${d.top_clients.map((c) => `<tr><td>${esc(c.name || "—")}<br><small class="muted">${esc(c.phone || "")}</small></td><td>${c.visits}</td><td>${money(c.spent)}</td></tr>`).join("")}</tbody></table>
+    </div>
+    <p class="muted small">${esc(t("st.note"))}</p>`;
+}
+
+document.querySelectorAll("#ranges button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("#ranges button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  statsRange = rangeFor(b.dataset.range);
+  loadStats();
+}));
+for (const id of ["stFrom", "stTo"]) $(id).addEventListener("change", () => {
+  if (!$("stFrom").value || !$("stTo").value) return;
+  document.querySelectorAll("#ranges button").forEach((x) => x.setAttribute("aria-pressed", "false"));
+  statsRange = { from: $("stFrom").value, to: $("stTo").value };
+  loadStats();
+});
