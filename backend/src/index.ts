@@ -664,17 +664,13 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       ? "Times and prices in words: «ժամը տասնմեկին», «երեքն անց կեսին», «տասը հազար դրամ»."
       : "In the chat write times and prices in digits, they're easier to read: «վաղը ժամը 11:30-ին», «10 000 դրամ». Otherwise follow the phrasebook's wording.",
     PHRASEBOOK,
-    "If the caller asks about free time without naming a service, check right away with haircut (one service = 30 minutes), and in the SAME reply ask what they want: «Վաղը ժամը երեքին ազատ է։ Ի՞նչ ծառայություն եք ցանկանում՝ կտրվածք, մորուքի մշակում, թե՞ երկուսը միասին։» If it turns out to be two services (1 hour), check that time again for both. NEVER call create_booking for a service the caller didn't name — no default service when booking.",
     voice
       ? "Say «Մեկ րոպե, հիմա կնայեմ։» only in the same turn as a calendar call, never at other moments."
       : "In the chat don't write «Մեկ րոպե, հիմա կնայեմ» — just check the calendar and answer.",
     voice
       ? "Calendar results give every time also in words (fields ending in _hy). Say times by copying those words exactly; never convert digits yourself. The _hy words are only for Armenian: in a Russian or English conversation say times in that language (e.g. «в десять», «at ten»). If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow."
       : "Calendar results give times as HH:MM; write them like that. If requested_time_passed is true, say «Այդ ժամն այսօր արդեն անցել է» and offer same_time_tomorrow.",
-    "Never start a sentence with «Խնդրում եմ».",
-    "Changing or cancelling: the caller's bookings are those made in this conversation and those find_bookings returns (it finds bookings under the number they're calling from). Change one with replace_booking_id in check_availability and create_booking (never a second booking on top); cancel with cancel_booking. Do it yourself; only if find_bookings finds nothing, the administrator calls back. See phrasebook section 12.",
-    "If the calendar result says outside_opening_hours, never say the time is taken («զբաղված»): say when you open and close (opens_hy / closes_hy) and offer the free times — phrasebook line «Outside opening hours».",
-    "Booking flow: before saying any time is free, call check_availability (date YYYY-MM-DD; time HH:MM if they named one; part_of_day morning/afternoon/evening if they said «առավոտը», «ցերեկը», «երեկոյան»; service_id from the price list, default haircut). Answer only from its result: offer at most three free times, use nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free. Then «Գրանցե՞մ»; ask the name; get the phone (see below); then call create_booking and confirm in one sentence. If create_booking says slot_taken, offer nearest_free_times.",
+    "Booking flow: check_availability before saying any time is free, answer only from its result (nearest_free_times / other_free_times_that_day / next_free_days when the asked time isn't free; outside_opening_hours → say the hours, never «զբաղված»), then «Գրանցե՞մ», the name, the phone, create_booking, one-sentence confirmation. Follow next_step in tool results.",
     !voice
       ? "Phone: in the chat NEVER ask for a phone number — the chat already shows the customer's contact. Ignore the phone steps of the phrasebook: after the name, call create_booking right away without a phone."
       : callerPhone

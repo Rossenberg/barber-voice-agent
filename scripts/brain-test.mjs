@@ -80,6 +80,7 @@ async function ask(item) {
           // same as the call page: one retry when OpenAI fails a response
           if (ev.response.status === "failed" && !retried) { retried = true; setTimeout(() => send({ type: "response.create" }), 600); return; }
           reasoning += ev.response.usage?.output_token_details?.reasoning_tokens ?? 0;
+          rtCost += rtUsage(ev.response.usage);
           const calls = (ev.response.output ?? []).filter((o) => o.type === "function_call");
           if (calls.length) {
             for (const c of calls) {
@@ -117,13 +118,21 @@ async function ask(item) {
   }
 }
 
-let cost = 0;
+// $ per 1M tokens. Realtime from OpenAI's pricing (as in scripts/cost-report.mjs); the grader is
+// gpt-6.1-terra (about 5x cheaper than gpt-6-astra, which stays for the live-call detector).
+const RT = { text_in: 4, cached_in: 0.4, text_out: 24 };
+const GRADER = { model: process.env.GRADER ?? "gpt-6.1-terra", in: 2, cached: 0.2, out: 8 };
+let cost = 0, rtCost = 0;
+const rtUsage = (u) => {
+  const cached = u?.input_token_details?.cached_tokens ?? 0;
+  return (((u?.input_tokens ?? 0) - cached) * RT.text_in + cached * RT.cached_in + (u?.output_tokens ?? 0) * RT.text_out) / 1e6;
+};
 async function grade(item, r) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model: "gpt-6-astra",
+      model: GRADER.model,
       reasoning_effort: "low",
       response_format: { type: "json_object" },
       messages: [
@@ -142,7 +151,8 @@ Answer JSON {"grade":"good"|"weak"|"bad","why":"one short sentence in Russian"}.
   });
   const data = await res.json();
   if (!res.ok) throw new Error(JSON.stringify(data).slice(0, 300));
-  cost += (data.usage.prompt_tokens * 10 + data.usage.completion_tokens * 50) / 1e6;
+  const cachedG = data.usage.prompt_tokens_details?.cached_tokens ?? 0;
+  cost += ((data.usage.prompt_tokens - cachedG) * GRADER.in + cachedG * GRADER.cached + data.usage.completion_tokens * GRADER.out) / 1e6;
   return JSON.parse(data.choices[0].message.content);
 }
 
@@ -184,6 +194,6 @@ for (const c of [...new Set(results.map((r) => r.cat))]) {
   const l = results.filter((r) => r.cat === c);
   console.log(`${String(c).padEnd(8)} good ${n(l, "good")}/${l.length}  weak ${n(l, "weak")}  bad ${n(l, "bad")}`);
 }
-console.log(`\nEFFORT=${EFFORT || "default"}: good ${n(results, "good")} · weak ${n(results, "weak")} · bad ${n(results, "bad")} · errors ${n(results, "error")} of ${results.length}; full reply median ${times.length ? (times[Math.floor(times.length / 2)] / 1000).toFixed(1) : "-"} s; grading ≈ $${cost.toFixed(2)}`);
+console.log(`\nEFFORT=${EFFORT || "default"}: good ${n(results, "good")} · weak ${n(results, "weak")} · bad ${n(results, "bad")} · errors ${n(results, "error")} of ${results.length}; full reply median ${times.length ? (times[Math.floor(times.length / 2)] / 1000).toFixed(1) : "-"} s; conversations $${rtCost.toFixed(2)} + grading $${cost.toFixed(2)} = $${(rtCost + cost).toFixed(2)}`);
 mkdirSync(join(ROOT, "scripts/bench-out"), { recursive: true });
 writeFileSync(join(ROOT, `scripts/bench-out/brain-${EFFORT || "default"}-${Date.now()}.json`), JSON.stringify(results, null, 2));
