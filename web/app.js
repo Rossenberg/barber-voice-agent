@@ -35,7 +35,7 @@ const T = {
     "pill.on": "Օգնականը միացված է", "pill.off": "Օգնականն անջատված է",
     "status.ready": "Պատրաստ է", "status.connecting": "Միանում է…", "status.live": "Եթերում", "status.off": "Անջատված է",
     "voice.female": "Անի", "voice.male": "Արամ", "voice.femaleHint": "Կանացի ձայն", "voice.maleHint": "Տղամարդու ձայն",
-    "call.start": "Զանգել", "call.end": "Ավարտել",
+    "call.start": "Զանգել", "call.end": "Ավարտել", "call.live": "Զանգն ընթացքում է",
     "label.idle": "Սեղմեք «Զանգել» և խոսեք ինչպես սովորական զանգի ժամանակ",
     "label.mic": "Թույլատրեք միկրոֆոնը", "label.connected": "Միացված է, խոսեք", "label.speaking": "Խոսում է…", "label.listening": "Լսում է…", "label.hearing": "Հասկանում է…",
     "mode.call": "Զանգել", "mode.chat": "Գրել",
@@ -107,7 +107,7 @@ const T = {
     "pill.on": "Ассистент включён", "pill.off": "Ассистент выключен",
     "status.ready": "Готов", "status.connecting": "Соединяем…", "status.live": "В эфире", "status.off": "Выключен",
     "voice.female": "Ани", "voice.male": "Арам", "voice.femaleHint": "Женский голос", "voice.maleHint": "Мужской голос",
-    "call.start": "Позвонить", "call.end": "Завершить",
+    "call.start": "Позвонить", "call.end": "Завершить", "call.live": "Идёт звонок",
     "label.idle": "Нажмите «Позвонить» и говорите, как в обычном звонке",
     "label.mic": "Разрешите доступ к микрофону", "label.connected": "Соединено, говорите", "label.speaking": "Говорит…", "label.listening": "Слушает…", "label.hearing": "Распознаёт…",
     "mode.call": "Позвонить", "mode.chat": "Написать",
@@ -261,6 +261,9 @@ function setInCall(inCall) {
   $("voices").style.pointerEvents = inCall ? "none" : "";
   $("voices").style.opacity = inCall ? "0.5" : "";
   fab.classList.remove("show");
+  // wherever they are on the page, a call can always be ended from this bar
+  $("callBar").hidden = !inCall;
+  $("callBarTime").textContent = "";
 }
 
 function startTimer() {
@@ -268,6 +271,7 @@ function startTimer() {
   const tick = () => {
     const left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
     setStatus("live", `${t("status.live")} · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`);
+    $("callBarTime").textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     if (!left) stopCall(); // demo calls are capped so a forgotten tab doesn't burn minutes
   };
   tick();
@@ -425,6 +429,7 @@ document.querySelectorAll(".modes button").forEach((b) =>
 
 startBtn.addEventListener("click", start);
 endBtn.addEventListener("click", () => stopCall());
+$("callBarEnd").addEventListener("click", () => stopCall());
 document.querySelectorAll("[data-start]").forEach((el) =>
   el.addEventListener("click", () => {
     $("assistant").scrollIntoView({ behavior: "smooth", block: "center" });

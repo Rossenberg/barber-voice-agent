@@ -235,7 +235,7 @@ function nextStep(body: Record<string, unknown>, result: Record<string, unknown>
     ? "The caller hasn't said which service yet: tell the free time(s) and in the same reply ask which service («Ի՞նչ ծառայություն եք ցանկանում՝ կտրվածք, մորուքի մշակում, թե՞ երկուսը միասին։»). Do NOT ask «Գրանցե՞մ» yet and don't book."
     : body.replace_booking_id
       ? "This is a change of their booking: if the time fits, ask «Փոխե՞մ Ձեր գրանցումը» (not «Գրանցե՞մ»), then create_booking with the same replace_booking_id."
-      : "Answer from this result; if a time fits, offer it and ask «Գրանցե՞մ». Then the name, then the phone, then create_booking.";
+      : "Answer from this result; if a time fits, offer it and ask «Գրանցե՞մ» — unless they already agreed to book in this conversation: then don't ask again, go on with the name, the phone, create_booking.";
   return { ...result, next_step: step };
 }
 
@@ -686,7 +686,7 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       ? "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters."
       : "This is a text chat: the barbershop's name may be written in Latin letters as above.",
     voice
-      ? "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. Never read the whole price list."
+      ? "Be very brief: one short sentence per reply, usually 3-10 words. Ask one thing at a time. If they ask what services you have or for all prices, don't refuse: name them briefly from the price list in one or two sentences (main services with prices; combos and coloring as one phrase each), then ask what they'd like."
       : "Be brief: one or two short sentences per message. Ask one thing at a time. No markdown, no lists, no emojis. List the whole price list only if they ask for all prices.",
     "Callers' everyday words and slang are mapped to services in the phrasebook below (What callers say → which service). Understand them, never use slang yourself.",
     voice

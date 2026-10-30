@@ -38,7 +38,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   // noise for speech and kept listening, and its mic pause after each reply swallowed a quick «հա».
   // OpenAI's semantic VAD is only the fallback if Silero fails to load.
   let manual = false, inPhrase = false, phraseTimer = null, holdTimer = null, micOn = true, lastAgentText = "";
-  let skipText = false, toolInResponse = false, owed = false, retriedFailed = false; // a reply dropped because the caller kept talking
+  let skipText = false, toolInResponse = false, owed = false, retriedFailed = false, phraseCapped = false, owedTimer = null; // a reply dropped because the caller kept talking
   const hasWords = (s) => /\p{L}/u.test(s ?? "");
   // On silence or noise the recognizer sometimes returns its own vocabulary hint as if the caller said it:
   // treat that as no words at all.
@@ -47,6 +47,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   const send = (obj) => dc?.readyState === "open" && dc.send(JSON.stringify(obj));
 
   function requestResponse() {
+    clearTimeout(owedTimer);
     if (responseActive) {
       responseWanted = true;
       return;
@@ -66,18 +67,13 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
       return;
     }
     inPhrase = true;
+    phraseCapped = false;
     ui.state("hearing");
     clearTimeout(phraseTimer);
-    phraseTimer = setTimeout(phraseEnded, 9000); // loud noise can keep the VAD "hearing" forever: answer what we have
-    // They went on talking before the reply was heard (e.g. a number dictated in pieces): drop that reply,
-    // both parts get one answer once they finish.
-    if (sources.length) return;
-    speakGen++;
-    if (responseActive && !toolInResponse) {
-      skipText = true;
-      owed = true;
-      send({ type: "response.cancel" });
-    }
+    // loud noise or music can keep the VAD "hearing" forever: answer what we have
+    phraseTimer = setTimeout(() => { phraseCapped = true; phraseEnded(); }, 9000);
+    // A sound in the mic no longer cancels the reply being prepared: with music or a TV on, every reply got
+    // cancelled and the assistant went silent for minutes. A real new phrase is handled once its text arrives.
   }
 
   // Silero heard a pause. Wait a little in case they go on: a phone number comes in pieces with pauses,
@@ -131,10 +127,14 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     clearTimeout(pendingTurn);
     pendingTurn = null;
     if (transcript) {
-      send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.` }] } });
+      const noisy = phraseCapped ? " This was 9+ seconds of nonstop sound — probably music, a TV or other people in the background: if it isn't said to you, ignore it and answer the caller's last real request (or «Ալո, լսո՞ւմ եք ինձ։»)." : "";
+      send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `Speech recognizer heard the caller say: «${transcript}». Use it together with the audio; where they differ, trust what makes sense for a barbershop booking.${noisy}` }] } });
     }
     if (inPhrase) {
       owed = true; // they're still talking: answer once, after the rest of it
+      // …but background sound can keep a "phrase" going: answer within 2 s anyway
+      clearTimeout(owedTimer);
+      owedTimer = setTimeout(() => { if (owed) requestResponse(); }, 2000);
       return;
     }
     requestResponse();
@@ -169,6 +169,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     setMic(false);
     playing = true;
     ui.speaking?.(true);
+    if (actx.state !== "running") await actx.resume().catch(() => {}); // iPhone suspends it: replies went out silent
     const reader = res.body.getReader();
     let rest = new Uint8Array(0), first = true;
     playEnd = Math.max(playEnd, actx.currentTime + 0.05);
@@ -239,12 +240,15 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
           log("user", { text });
           break;
         }
-        // A real new phrase: whatever was still playing from the previous turn is dropped
-        // (OpenAI sometimes answers twice when it splits a long phrase).
-        speakGen++;
-        sources.forEach((s) => { try { s.stop(); } catch {} });
-        sources = [];
-        playEnd = 0;
+        // A real new phrase. A reply already being heard plays to the end (cutting it on every sound left
+        // callers with music on hearing nothing); one not yet audible is dropped — this phrase gets one answer.
+        if (!sources.length) {
+          speakGen++;
+          if (responseActive && !toolInResponse) {
+            skipText = true;
+            send({ type: "response.cancel" });
+          }
+        }
         turn++;
         agentEl = null;
         ui.state("answering");
