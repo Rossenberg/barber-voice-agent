@@ -233,7 +233,9 @@ function nextStep(body: Record<string, unknown>, result: Record<string, unknown>
   if (result.error || result.open === false) return result;
   const step = body.service_named === false
     ? "The caller hasn't said which service yet: tell the free time(s) and in the same reply ask which service («Ի՞նչ ծառայություն եք ցանկանում՝ կտրվածք, մորուքի մշակում, թե՞ երկուսը միասին։»). Do NOT ask «Գրանցե՞մ» yet and don't book."
-    : "Answer from this result; if a time fits, offer it and ask «Գրանցե՞մ». Then the name, then the phone, then create_booking.";
+    : body.replace_booking_id
+      ? "This is a change of their booking: if the time fits, ask «Փոխե՞մ Ձեր գրանցումը» (not «Գրանցե՞մ»), then create_booking with the same replace_booking_id."
+      : "Answer from this result; if a time fits, offer it and ask «Գրանցե՞մ». Then the name, then the phone, then create_booking.";
   return { ...result, next_step: step };
 }
 
@@ -261,7 +263,11 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
     return { ...base, open: true, error: "too_many_people", message: `Only ${settings.barbers} people can be served at the same time: check them one after the other (people = ${settings.barbers} or 1).` };
   }
   const closed = closedReason(settings, date);
-  if (closed) return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, biz, settings, date, service.duration_min) };
+  if (closed) {
+    // a past date: look for free days from today on (looking from that date offered days that had passed too)
+    const from = closed === "past" ? addDays(localNow().date, -1) : date;
+    return { ...base, open: false, reason: closed, next_free_days: closed === "too_far" ? [] : await nextOpenDays(env.DB, biz, settings, from, service.duration_min) };
+  }
 
   const changing = Number(String(body.replace_booking_id ?? "").replace(/\D/g, "")) - 1000;
   const starts = await freeStarts(env.DB, biz, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
@@ -295,7 +301,7 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
       requested_time_hy: timeHy(requested),
       requested_time_free: free,
       ...(outside ? { outside_opening_hours: true, opening_hours_that_day: `${toHHMM(openMin)}–${toHHMM(closeMin)}`, opens_hy: timeHy(openMin), closes_hy: timeHy(closeMin) } : {}),
-      ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near) }),
+      ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near), later_free_times: starts.filter((m) => m > requested).slice(0, 3).map(toHHMM), later_free_times_hy: hy(starts.filter((m) => m > requested).slice(0, 3).map(toHHMM)) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
     };
   }
@@ -429,7 +435,22 @@ async function cancelBooking(env: Env, body: Record<string, unknown>, caller: Ca
 
 /** Runs one of the assistant's tools for the voice call and the chat alike. */
 async function runTool(env: Env, name: string, args: Record<string, unknown>, caller: Caller) {
-  if (name === "check_availability") return checkAvailability(env, args, caller.biz);
+  if (name === "check_availability") {
+    const result = await checkAvailability(env, args, caller.biz);
+    if (!args.replace_booking_id && isDate(args.date)) {
+      const { results: same } = await env.DB.prepare(
+        "SELECT id, client_name, service_name, start_min FROM bookings WHERE business_id = ? AND date = ? AND status = 'confirmed' AND (conversation_id = ? OR (? IS NOT NULL AND phone = ?))",
+      ).bind(caller.biz, args.date, caller.conv, caller.phone, caller.phone).all<{ id: number; client_name: string | null; service_name: string; start_min: number }>();
+      if (same.length) {
+        return {
+          ...result,
+          caller_bookings_that_day: same.map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, time: toHHMM(b.start_min) })),
+          caller_bookings_note: "The caller already has these bookings that day. If they're changing one, check again with its replace_booking_id; a booking for another person (a friend, a son) is a new one — that's fine.",
+        };
+      }
+    }
+    return result;
+  }
   if (name === "create_booking") return createBooking(env, args, caller);
   if (name === "find_bookings") return findBookings(env, caller);
   if (name === "cancel_booking") return cancelBooking(env, args, caller);

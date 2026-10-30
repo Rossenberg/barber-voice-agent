@@ -64,6 +64,7 @@ Calendar results give every time in words (fields ending in `_hy`): read them ex
 - Dates: find them in the «Next days» line of your instructions, don't count. Months (+ի: «նոյեմբերի 2-ին»): հունվար, փետրվար, մարտ, ապրիլ, մայիս, հունիս, հուլիս, օգոստոս, սեպտեմբեր, հոկտեմբեր, նոյեմբեր, դեկտեմբեր; Russian-style «յանվարի», «ֆևրալի», «ապրելի», «մայի», «իյունի», «իյուլի», «ավգուստի», «սենտյաբրի», «օկտյաբրի», «նոյաբրի», «դեկաբրի» mean the same.
   - «նոյեմբերի 2-ին», «2 նոյեմբերի», «երկու նոյեմբերի» → the coming 2 November. «ամսի 5-ին», «5-ին», «հինգերորդին» → the 5th of this month, or next month if passed. «մյուս/հաջորդ ամսվա 10-ին» → next month. «ամսվա վերջին» → last days of this month.
   - The number after «ամսի» or a month is the DATE; with «ժամը», «ցերեկը», «երեկոյան» it's the TIME: «նոյեմբերի 2-ին, ցերեկը ժամը երեքին» = 2 Nov, 15:00. «Երկուսին» alone is 14:00, «ամսի երկուսին» is the 2nd.
+  - A past date: still call check_availability (it returns next_free_days) and offer those: «Այդ օրն արդեն անցել է։ Ազատ է ‹…›։»
   - Say dates as «նոյեմբերի երկուսին», with the weekday when it helps: «նոյեմբերի երկուսին՝ կիրակի օրը».
 
 ## 1. What they need
