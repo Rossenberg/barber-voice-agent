@@ -23,7 +23,7 @@ const T = {
     "k.after": "Записи в нерабочее время", "k.afterHint": "их принял ассистент, когда вы были закрыты", "k.conv": "Разговоров ассистента", "k.convHint": "звонков · чатов · минут",
     "ch.day": "Записи по дням", "ch.dayHint": "наведите на столбик, чтобы увидеть число", "ch.hour": "Самые активные часы", "ch.weekday": "Самые активные дни",
     "ch.services": "Популярные услуги", "ch.channels": "Откуда записи", "ch.call": "Звонок", "ch.chat": "Чат", "ch.manual": "Вручную",
-    "ch.clients": "Постоянные клиенты", "ch.client": "Клиент", "ch.visits": "Визитов", "ch.spent": "Сумма",
+    "ch.clients": "Постоянные клиенты", "ch.barbers": "По барберам", "ch.noBarber": "Без барбера", "ch.client": "Клиент", "ch.visits": "Визитов", "ch.spent": "Сумма",
     "st.peak": "Пик:", "st.empty": "За этот период записей нет.", "st.note": "Суммы — по текущим ценам вашего прайса.", "bookingsWord": "зап.",
     "cal.add": "Запись", "cal.block": "Закрыть часы", "cal.closedDay": "Выходной", "cal.empty": "Записей пока нет", "cal.emptyHint": "Записи ассистента появятся здесь сами.",
     "cal.closed": "Закрыто", "cal.manual": "вручную", "cal.cancelled": "отменена", "cal.cancelAsk": "Отменить запись?", "cal.unblockAsk": "Открыть эти часы снова?",
@@ -69,7 +69,7 @@ const T = {
     "k.after": "Գրանցումներ ոչ աշխատանքային ժամին", "k.afterHint": "դրանք ընդունել է օգնականը, երբ փակ էիք", "k.conv": "Օգնականի զրույցներ", "k.convHint": "զանգ · չատ · րոպե",
     "ch.day": "Գրանցումներ ըստ օրերի", "ch.dayHint": "սյան վրա պահեք՝ թիվը տեսնելու համար", "ch.hour": "Ամենաակտիվ ժամերը", "ch.weekday": "Ամենաակտիվ օրերը",
     "ch.services": "Հայտնի ծառայություններ", "ch.channels": "Որտեղից են գրանցումները", "ch.call": "Զանգ", "ch.chat": "Չատ", "ch.manual": "Ձեռքով",
-    "ch.clients": "Մշտական հաճախորդներ", "ch.client": "Հաճախորդ", "ch.visits": "Այց", "ch.spent": "Գումար",
+    "ch.clients": "Մշտական հաճախորդներ", "ch.barbers": "Ըստ բարբերների", "ch.noBarber": "Առանց բարբերի", "ch.client": "Հաճախորդ", "ch.visits": "Այց", "ch.spent": "Գումար",
     "st.peak": "Գագաթ՝", "st.empty": "Այս ժամանակահատվածում գրանցումներ չկան։", "st.note": "Գումարները՝ Ձեր գնացուցակի ընթացիկ գներով։", "bookingsWord": "գրանց.",
     "cal.add": "Գրանցում", "cal.block": "Փակել ժամերը", "cal.closedDay": "Հանգստյան օր", "cal.empty": "Գրանցումներ դեռ չկան", "cal.emptyHint": "Օգնականի գրանցումներն ինքնաբերաբար կհայտնվեն այստեղ։",
     "cal.closed": "Փակ է", "cal.manual": "ձեռքով", "cal.cancelled": "չեղարկված", "cal.cancelAsk": "Չեղարկե՞լ գրանցումը", "cal.unblockAsk": "Կրկին բացե՞լ այս ժամերը",
@@ -555,7 +555,20 @@ boot();
 // ---------------------------------------------------------------- analytics
 
 const money = (n) => `${Math.round(n).toLocaleString("ru-RU").replace(/\u00a0/g, " ")} ֏`;
-let statsRange = { from: null, to: null }, statsData = null;
+let statsRange = { from: null, to: null }, statsData = null, statsBarber = 0;
+
+function renderStatBarbers() {
+  const wrap = $("statBarbers");
+  wrap.hidden = !state.barbers?.length;
+  if (wrap.hidden) { statsBarber = 0; return; }
+  wrap.replaceChildren(...[{ id: 0, name: t("br.all") }, ...state.barbers].map((b) => {
+    const btn = document.createElement("button");
+    btn.textContent = b.name;
+    btn.setAttribute("aria-pressed", String(b.id === statsBarber));
+    btn.addEventListener("click", () => { statsBarber = b.id; renderStatBarbers(); loadStats(); });
+    return btn;
+  }));
+}
 
 function rangeFor(kind) {
   const today = state.today;
@@ -569,7 +582,8 @@ async function loadStats() {
   $("stFrom").value = statsRange.from;
   $("stTo").value = statsRange.to;
   try {
-    statsData = await api(`/api/app/analytics?from=${statsRange.from}&to=${statsRange.to}`);
+    renderStatBarbers();
+    statsData = await api(`/api/app/analytics?from=${statsRange.from}&to=${statsRange.to}${statsBarber ? `&barber=${statsBarber}` : ""}`);
     renderStats();
   } catch (e) { toast(errText(e), true); }
 }
@@ -615,6 +629,7 @@ function renderStats() {
       <div class="chart-card"><h3>${esc(t("ch.hour"))}</h3><p>&nbsp;</p>${bars(hourVals, hourVals.map((_, i) => String(hFrom + i)), (i, v) => `${hFrom + i}:00–${hFrom + i + 1}:00 · ${v} ${t("bookingsWord")}`)}</div>
       <div class="chart-card"><h3>${esc(t("ch.weekday"))}</h3><p>&nbsp;</p>${bars(wd, order.map((i) => t("days")[i]), (i, v) => `${t("daysLong")[order[i]]} · ${v} ${t("bookingsWord")}`)}</div>
     </div>
+    ${d.by_barber?.length ? `<div class="chart-card"><h3>${esc(t("ch.barbers"))}</h3><p>&nbsp;</p>${(() => { const mx = Math.max(...d.by_barber.map((x) => x.bookings), 1); return d.by_barber.map((x) => `<div class="hbar"><span class="nm">${esc(x.name || t("ch.noBarber"))}</span><span class="val">${x.bookings} · ${money(x.revenue)}</span><span class="track"><i style="width:${(x.bookings / mx) * 100}%"></i></span></div>`).join(""); })()}</div>` : ""}
     <div class="stats-grid">
       <div class="chart-card"><h3>${esc(t("ch.services"))}</h3><p>&nbsp;</p>${d.services.slice(0, 8).map((x) => `<div class="hbar"><span class="nm">${esc(x.name)}</span><span class="val">${x.count} · ${money(x.revenue)}</span><span class="track"><i style="width:${(x.count / sMax) * 100}%"></i></span></div>`).join("")}</div>
       <div class="chart-card"><h3>${esc(t("ch.channels"))}</h3><p>&nbsp;</p>${[["call", d.channels.call], ["chat", d.channels.chat], ["manual", d.channels.manual]].map(([k, v]) => `<div class="hbar"><span class="nm">${esc(t("ch." + k))}</span><span class="val">${v} · ${Math.round((v / chTotal) * 100)}%</span><span class="track"><i style="width:${(v / chTotal) * 100}%"></i></span></div>`).join("")}</div>

@@ -1102,19 +1102,22 @@ async function shopState(env: Env, biz: number) {
  * The owner's numbers for a period: bookings, clients, money, busy hours and days, services, loyal clients,
  * what the assistant brought in. Money is counted at today's price-list prices (a range → its middle).
  */
-async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown) {
+async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown, barberId = 0) {
   const today = localNow().date;
   const to = isDate(toRaw) ? toRaw : today;
   const from = isDate(fromRaw) && fromRaw <= to ? fromRaw : addDays(to, -29);
   const settings = await getSettings(env.DB, biz);
   const services = await getServices(env.DB, biz, false);
-  type B = { id: number; service_id: string; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; status: string; source: string; conversation_id: string | null; created_at: string };
-  const [{ results: rows }, { results: earlier }, { results: convs }] = await env.DB.batch([
-    env.DB.prepare("SELECT id, service_id, service_name, date, start_min, client_name, phone, status, source, conversation_id, created_at FROM bookings WHERE business_id = ? AND date BETWEEN ? AND ?").bind(biz, from, to),
+  type B = { id: number; service_id: string; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; status: string; source: string; conversation_id: string | null; created_at: string; barber_id: number | null };
+  const [{ results: allRows }, { results: earlier }, { results: convs }] = await env.DB.batch([
+    env.DB.prepare("SELECT id, service_id, service_name, date, start_min, client_name, phone, status, source, conversation_id, created_at, barber_id FROM bookings WHERE business_id = ? AND date BETWEEN ? AND ?").bind(biz, from, to),
     // clients seen before the period: everyone else in it is new
     env.DB.prepare("SELECT DISTINCT COALESCE(phone, client_name) AS k FROM bookings WHERE business_id = ? AND date < ? AND status = 'confirmed'").bind(biz, from),
     env.DB.prepare("SELECT call_id, MIN(created_at) AS at, SUM(role = 'user') AS turns, MAX(CASE WHEN role = 'usage' AND text LIKE '%\"kind\":\"call\"%' THEN CAST(json_extract(text, '$.seconds') AS INTEGER) END) AS seconds FROM realtime_log WHERE business_id = ? AND created_at >= ? AND created_at < ? GROUP BY call_id HAVING turns > 0").bind(biz, `${addDays(from, 0)} 00:00:00`, `${addDays(to, 1)} 04:00:00`),
   ]) as unknown as [{ results: B[] }, { results: { k: string }[] }, { results: { call_id: string; at: string; turns: number; seconds: number | null }[] }];
+  // one barber's numbers, or everyone's (with a per-barber breakdown)
+  const rows = barberId ? allRows.filter((b) => b.barber_id === barberId) : allRows;
+  const barbers = await getBarbers(env.DB, biz);
 
   const priceOf = (id: string) => { const s = resolveServices(services, id); return s ? (s.price_max ? Math.round((s.price_min + s.price_max) / 2) : s.price_min) : 0; };
   const nameOf = (b: B) => { const s = resolveServices(services, b.service_id); return s?.name_hy ?? b.service_name; };
@@ -1175,12 +1178,16 @@ async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown
     channels: { call: ok.filter((b) => channel(b) === "call").length, chat: ok.filter((b) => channel(b) === "chat").length, manual: ok.filter((b) => channel(b) === "manual").length },
     after_hours: afterHours,
     conversations: { calls: calls.length, chats: convs.length - calls.length, call_minutes: Math.round(calls.reduce((t, c) => t + (c.seconds ?? 0), 0) / 60) },
+    barber_id: barberId || null,
+    by_barber: barberId || !barbers.length ? [] : [...barbers.map((br) => ({ name: br.name, list: ok.filter((b) => b.barber_id === br.id) })), { name: "", list: ok.filter((b) => !b.barber_id) }]
+      .filter((x) => x.list.length)
+      .map((x) => ({ name: x.name, bookings: x.list.length, revenue: x.list.reduce((t, b) => t + priceOf(b.service_id), 0) })),
   };
 }
 
 async function shopApi(env: Env, biz: number, method: string, sub: string, body: Record<string, unknown>): Promise<Response> {
   if (sub === "state" && method === "GET") return json(await shopState(env, biz));
-  if (sub === "analytics" && method === "GET") return json(await analytics(env, biz, body.from, body.to));
+  if (sub === "analytics" && method === "GET") return json(await analytics(env, biz, body.from, body.to, Number(body.barber) || 0));
 
   if (sub === "settings" && method === "PUT") {
     const settings = validSettings(body, await getSettings(env.DB, biz));
