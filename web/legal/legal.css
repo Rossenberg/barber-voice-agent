@@ -1,0 +1,10 @@
+body { background: var(--soft); }
+.legal { width: min(780px, 100% - 32px); margin: 28px auto 80px; background: #fff; border: 1px solid var(--line); border-radius: 24px; padding: 28px 22px; }
+.legal h1 { font-size: clamp(26px, 5vw, 36px); margin: 0 0 6px; letter-spacing: -0.02em; }
+.legal .upd { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+.legal h2 { font-size: 19px; margin: 28px 0 8px; }
+.legal p, .legal li { color: var(--ink-2); font-size: 15.5px; line-height: 1.65; }
+.legal ul { padding-left: 20px; }
+.legal a { color: var(--green-2); }
+.legal .box { background: var(--mint); border-radius: 16px; padding: 14px 16px; color: var(--green-deep); font-weight: 600; }
+@media (min-width: 720px) { .legal { padding: 44px 48px; } }

@@ -30,7 +30,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   let stoppedAt = 0, agentEl = null, textBuf = "";
   let playEnd = 0, sources = [], unmuteTimer = null, speakGen = 0, playing = false;
   let callId = "", turn = 0, callStartedAt = 0, ended = false;
-  let callToken = ""; // the server's signed pass: who is calling, for finding/changing their bookings
+  let callToken = "";
+  const voiceSeed = Math.floor(Math.random() * 1e9); let spokenBefore = ""; // the server's signed pass: who is calling, for finding/changing their bookings
   // One response at a time: asking for a new one while another runs is an error and made the assistant
   // say extra lines («…դեռ ընթացքի մեջ է»), so requests wait for the current response to finish.
   let responseActive = false, responseWanted = false;
@@ -163,7 +164,9 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     // a reply left over from an earlier turn is dropped when the caller speaks again (see speech_stopped).
     const gen = speakGen;
     usage({ kind: "tts", chars: text.length });
-    const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice }) });
+    // same seed for the whole call and the previous reply as context, so the voice stays the same person
+    const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice, seed: voiceSeed, prev: spokenBefore }) });
+    spokenBefore = text;
     if (!res.ok || !res.body) return void ui.add(ui.t("voice.error"), "tool");
     if (gen !== speakGen || ended) return void res.body.cancel();
     setMic(false);

@@ -803,15 +803,21 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
 
 /** Streams Armenian speech (raw 24 kHz 16-bit PCM) for one reply, for the /realtime/ hybrid mode. */
 async function ttsStream(env: Env, req: Request): Promise<Response> {
-  const { text, voice } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string };
+  const { text, voice, prev, seed } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string; prev?: string; seed?: number };
   const clean = cleanText(text, 500);
   if (!clean) return json({ error: "no_text" }, 400);
   const voiceId = voice === "male" ? "JBFqnCBsd6RMkjVDRZzb" : "Xb7hH8MSUJpSbSDYk0k2"; // George / Alice, as on the agent
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000`, {
+  // Every reply is generated on its own: with default settings the voice drifted mid-call until it sounded like
+  // someone else. Higher stability, one seed per call and the previous reply as context keep it the same person.
+  const base = { text: clean, model_id: "eleven_v4_turbo", language_code: "hy", voice_settings: { stability: 0.7, similarity_boost: 0.9, style: 0, use_speaker_boost: true } };
+  const extra = { ...(Number.isInteger(seed) ? { seed: Math.abs(Number(seed)) % 4294967295 } : {}), ...(prev ? { previous_text: cleanText(prev, 500) } : {}) };
+  const call = (body: object) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000`, {
     method: "POST",
     headers: { "xi-api-key": env.ELEVENLABS_API_KEY, "content-type": "application/json" },
-    body: JSON.stringify({ text: clean, model_id: "eleven_v4_turbo", language_code: "hy" }),
+    body: JSON.stringify(body),
   });
+  let res = await call({ ...base, ...extra });
+  if (res.status === 400 || res.status === 422) res = await call(base); // a model that doesn't take seed / previous_text
   if (!res.ok || !res.body) return json({ error: `tts ${res.status} ${(await res.text()).slice(0, 200)}` }, 502);
   return new Response(res.body, { headers: { "content-type": "audio/pcm", "cache-control": "no-store" } });
 }
