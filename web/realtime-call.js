@@ -39,7 +39,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   // noise for speech and kept listening, and its mic pause after each reply swallowed a quick «հա».
   // OpenAI's semantic VAD is only the fallback if Silero fails to load.
   let manual = false, inPhrase = false, phraseTimer = null, holdTimer = null, micOn = true, lastAgentText = "";
-  let skipText = false, toolInResponse = false, owed = false, retriedFailed = false, phraseCapped = false, owedTimer = null; // a reply dropped because the caller kept talking
+  let skipText = false, toolInResponse = false, owed = false, retriedFailed = false, phraseCapped = false, owedTimer = null;
+  let responseWatch = null, lastResponseEvent = 0, stallRetries = 0; // a reply dropped because the caller kept talking
   const hasWords = (s) => /\p{L}/u.test(s ?? "");
   // On silence or noise the recognizer sometimes returns its own vocabulary hint as if the caller said it:
   // treat that as no words at all.
@@ -51,11 +52,30 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     clearTimeout(owedTimer);
     if (responseActive) {
       responseWanted = true;
+      watchResponse();
       return;
     }
     responseActive = true;
     owed = false;
+    lastResponseEvent = performance.now();
     send({ type: "response.create" });
+    watchResponse();
+  }
+
+  // A response sometimes hangs: no text, no tool call, no «done» — the caller heard silence for 30 s. If nothing
+  // has come for 7 s, cancel it and ask again (twice at most per phrase).
+  function watchResponse() {
+    clearTimeout(responseWatch);
+    responseWatch = setTimeout(() => {
+      if (ended || !responseActive || performance.now() - lastResponseEvent < 7000) return;
+      if (stallRetries >= 2) return void log("event", { text: "response stalled, gave up" });
+      stallRetries++;
+      log("event", { text: `response stalled ${Math.round((performance.now() - lastResponseEvent) / 1000)} s, retrying` });
+      send({ type: "response.cancel" });
+      responseActive = false;
+      responseWanted = false;
+      setTimeout(requestResponse, 300);
+    }, 7500);
   }
 
   // Silero heard the caller start talking.
@@ -89,6 +109,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   // The phrase is over: hand the audio to OpenAI and wait for its transcript.
   function phraseEnded() {
     retriedFailed = false;
+    stallRetries = 0;
     clearTimeout(phraseTimer);
     clearTimeout(holdTimer);
     holdTimer = null;
@@ -212,6 +233,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
 
   function onEvent(e) {
     const ev = JSON.parse(e.data);
+    if (ev.type?.startsWith("response.")) lastResponseEvent = performance.now(); // the response is alive
     if (DEBUG) console.log(ev.type, ev);
     switch (ev.type) {
       case "input_audio_buffer.speech_started":
@@ -315,6 +337,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
       }
       case "response.done":
         responseActive = false;
+        clearTimeout(responseWatch);
         if (ev.response?.usage) usage({ kind: "openai", usage: ev.response.usage });
         // OpenAI sometimes fails a response outright (seen in quick test series): try once more instead of going quiet
         // out of OpenAI credit: retrying won't help — tell the page, don't sit in silence
@@ -334,6 +357,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
           toolOutputs = [];
           Promise.all(outs).then((items) => {
             for (const it of items) dc?.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: it.call_id, output: it.output } }));
+            stallRetries = 0;
             requestResponse();
           });
         } else if (responseWanted) {
@@ -358,6 +382,8 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     clearTimeout(unmuteTimer);
     clearTimeout(phraseTimer);
     clearTimeout(holdTimer);
+    clearTimeout(responseWatch);
+    clearTimeout(owedTimer);
     pc?.close();
     recorder?.stop();
     stream?.getTracks().forEach((t) => t.stop());
