@@ -167,6 +167,15 @@ const fmtPrice = (s) => {
   return `${s.price_max ? `${n(s.price_min)}–${n(s.price_max)}` : n(s.price_min)} ${t("amd")}`;
 };
 
+// The demo shop's services have Armenian and English names only; the Russian page shows these.
+const RU_NAMES = {
+  haircut: "Стрижка", fade_cut: "Фейд", buzz_cut: "Стрижка машинкой", beard_trim: "Оформление бороды", shave: "Бритьё",
+  head_shave: "Бритьё головы", junior_cut: "Детская стрижка", styling: "Укладка", waxing: "Восковая депиляция",
+  haircut_beard: "Стрижка + борода", fade_beard: "Фейд + борода", buzz_beard: "Стрижка машинкой + борода",
+  haircut_shave: "Стрижка + бритьё", buzz_shave: "Стрижка машинкой + бритьё", head_shave_beard: "Бритьё головы + борода",
+  head_shave_shave: "Бритьё головы + бритьё", beard_tint: "Тонирование бороды", hair_tint: "Тонирование волос",
+};
+
 function renderPrices() {
   if (!config) return;
   const groups = ["main", "combo", "color"].map((cat) => [cat, config.services.filter((s) => s.category === cat)]).filter(([, list]) => list.length);
@@ -180,8 +189,8 @@ function renderPrices() {
         const row = document.createElement("div");
         row.className = "price-row";
         row.innerHTML = `<div class="nm"><b></b><span></span></div><div class="pr"></div>`;
-        row.querySelector("b").textContent = lang === "hy" ? s.name_hy : s.name_en;
-        row.querySelector(".nm span").textContent = `${lang === "hy" ? s.name_en : s.name_hy} · ${s.duration_min} ${t("min")}`;
+        row.querySelector("b").textContent = lang === "hy" ? s.name_hy : RU_NAMES[s.id] ?? s.name_en;
+        row.querySelector(".nm span").textContent = `${s.duration_min} ${t("min")}`;
         row.querySelector(".pr").textContent = fmtPrice(s);
         g.append(row);
       }
