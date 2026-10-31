@@ -17,8 +17,8 @@ const T = {
     "err.slot_taken": "Это время уже занято.", "err.email_failed": "Не удалось отправить письмо. Попробуйте ещё раз через минуту.", "err.network": "Нет связи с сервером. Попробуйте ещё раз.", "err.generic": "Что-то пошло не так. Попробуйте ещё раз.",
     "verify.ok": "Почта подтверждена. Добро пожаловать!", "verify.failed": "Ссылка подтверждения устарела. Войдите, чтобы получить новую.",
     "tab.calendar": "Календарь", "tab.services": "Услуги", "tab.settings": "Настройки", "tab.test": "Проверить", "tab.stats": "Аналитика",
-    "st.today": "Сегодня", "st.7": "7 дней", "st.30": "30 дней", "st.month": "Этот месяц", "st.90": "3 месяца",
-    "k.revenue": "Заработано", "k.revenueHint": "за прошедшие визиты", "k.expected": "ещё ожидается", "k.bookings": "Записей", "k.cancelled": "отмен",
+    "st.today": "Сегодня", "st.7": "7 дней", "st.30": "30 дней", "st.month": "Этот месяц", "st.90": "3 месяца", "st.next": "Впереди",
+    "k.revenue": "Заработано", "k.revenueHint": "за прошедшие визиты", "k.expected": "ещё ожидается", "k.bookings": "Записей", "k.cancelled": "отменено",
     "k.clients": "Клиентов", "k.new": "новых", "k.returning": "Пришли повторно", "k.returningHint": "2 и более визита", "k.avg": "Средний чек",
     "k.after": "Записи в нерабочее время", "k.afterHint": "их принял ассистент, когда вы были закрыты", "k.conv": "Разговоров ассистента", "k.convHint": "звонков · чатов · минут",
     "ch.day": "Записи по дням", "ch.dayHint": "наведите на столбик, чтобы увидеть число", "ch.hour": "Самые активные часы", "ch.weekday": "Самые активные дни",
@@ -63,7 +63,7 @@ const T = {
     "err.slot_taken": "Այս ժամն արդեն զբաղված է։", "err.email_failed": "Չհաջողվեց ուղարկել նամակը։ Փորձեք կրկին մեկ րոպեից։", "err.network": "Սերվերի հետ կապ չկա։ Փորձեք կրկին։", "err.generic": "Ինչ-որ բան սխալ գնաց։ Փորձեք կրկին։",
     "verify.ok": "Էլ. փոստը հաստատված է։ Բարի գալուստ։", "verify.failed": "Հաստատման հղումը հնացել է։ Մուտք գործեք՝ նորը ստանալու համար։",
     "tab.calendar": "Օրացույց", "tab.services": "Ծառայություններ", "tab.settings": "Կարգավորումներ", "tab.test": "Ստուգել", "tab.stats": "Վերլուծություն",
-    "st.today": "Այսօր", "st.7": "7 օր", "st.30": "30 օր", "st.month": "Այս ամիս", "st.90": "3 ամիս",
+    "st.today": "Այսօր", "st.7": "7 օր", "st.30": "30 օր", "st.month": "Այս ամիս", "st.90": "3 ամիս", "st.next": "Առաջիկա",
     "k.revenue": "Վաստակ", "k.revenueHint": "անցած այցերից", "k.expected": "դեռ սպասվում է", "k.bookings": "Գրանցումներ", "k.cancelled": "չեղարկված",
     "k.clients": "Հաճախորդներ", "k.new": "նոր", "k.returning": "Կրկին եկել են", "k.returningHint": "2 և ավելի այց", "k.avg": "Միջին չեկ",
     "k.after": "Գրանցումներ ոչ աշխատանքային ժամին", "k.afterHint": "դրանք ընդունել է օգնականը, երբ փակ էիք", "k.conv": "Օգնականի զրույցներ", "k.convHint": "զանգ · չատ · րոպե",
@@ -573,7 +573,9 @@ function renderStatBarbers() {
 function rangeFor(kind) {
   const today = state.today;
   if (kind === "today") return { from: today, to: today };
-  if (kind === "month") return { from: today.slice(0, 8) + "01", to: today };
+  // the whole month, upcoming days too (bookings ahead were left out when every range ended today)
+  if (kind === "month") { const d = new Date(today.slice(0, 8) + "01T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return { from: today.slice(0, 8) + "01", to: d.toISOString().slice(0, 10) }; }
+  if (kind === "next") return { from: today, to: addDays(today, 30) };
   return { from: addDays(today, -(Number(kind) - 1)), to: today };
 }
 
@@ -616,15 +618,15 @@ function renderStats() {
   box.innerHTML = `
     <div class="kpis">
       <div class="kpi hero"><small>${esc(t("k.revenue"))} · ${esc(t("k.revenueHint"))}</small><b>${money(d.revenue)}</b><span>+ ${money(d.expected)} ${esc(t("k.expected"))}</span></div>
-      <div class="kpi"><small>${esc(t("k.bookings"))}</small><b>${d.bookings}</b><span>${d.cancelled} ${esc(t("k.cancelled"))}</span></div>
-      <div class="kpi"><small>${esc(t("k.clients"))}</small><b>${d.clients}</b><span>${d.new_clients} ${esc(t("k.new"))}</span></div>
+      <div class="kpi"><small>${esc(t("k.bookings"))}</small><b>${d.bookings}</b><span>${esc(t("k.cancelled"))}: ${d.cancelled}</span></div>
+      <div class="kpi"><small>${esc(t("k.clients"))}</small><b>${d.clients}</b><span>${esc(t("k.new"))}: ${d.new_clients}</span></div>
       <div class="kpi"><small>${esc(t("k.returning"))}</small><b>${d.returning_clients}</b><span>${esc(t("k.returningHint"))}</span></div>
       <div class="kpi"><small>${esc(t("k.avg"))}</small><b>${money(d.avg_check)}</b></div>
       <div class="kpi"><small>${esc(t("k.after"))}</small><b>${d.after_hours}</b><span>${esc(t("k.afterHint"))}</span></div>
-      <div class="kpi"><small>${esc(t("k.conv"))}</small><b>${d.conversations.calls + d.conversations.chats}</b><span>${d.conversations.calls} · ${d.conversations.chats} · ${d.conversations.call_minutes} ${esc(t("k.convHint").split(" · ").pop())}</span></div>
+      ${d.barber_id ? "" : `<div class="kpi"><small>${esc(t("k.conv"))}</small><b>${d.conversations.calls + d.conversations.chats}</b><span>${d.conversations.calls} · ${d.conversations.chats} · ${d.conversations.call_minutes} ${esc(t("k.convHint").split(" · ").pop())}</span></div>`}
     </div>
     ${d.bookings ? `<div class="insight">📈 ${esc(t("st.peak"))} ${esc(t("daysLong")[peakDay])}, ${String(peakHour).padStart(2, "0")}:00–${String(peakHour + 1).padStart(2, "0")}:00</div>` : ""}
-    ${days ? `<div class="chart-card"><h3>${esc(t("ch.day"))}</h3><p>${esc(t("ch.dayHint"))}</p>${bars(days.map((x) => x.bookings), days.map((x, i) => (days.length <= 10 || i % Math.ceil(days.length / 8) === 0 ? short(x.date) : "")), (i, v) => `${short(days[i].date)}: ${v} ${t("bookingsWord")} · ${money(days[i].revenue)}`)}</div>` : ""}
+    ${days ? `<div class="chart-card"><h3>${esc(t("ch.day"))}</h3><p>${esc(t("ch.dayHint"))}</p>${bars(days.map((x) => x.bookings), days.map((x, i) => (days.length <= 10 ? short(x.date) : i % Math.ceil(days.length / 8) === 0 ? String(Number(x.date.slice(8))) : "")), (i, v) => `${short(days[i].date)}: ${v} ${t("bookingsWord")} · ${money(days[i].revenue)}`)}</div>` : ""}
     <div class="stats-grid">
       <div class="chart-card"><h3>${esc(t("ch.hour"))}</h3><p>&nbsp;</p>${bars(hourVals, hourVals.map((_, i) => String(hFrom + i)), (i, v) => `${hFrom + i}:00–${hFrom + i + 1}:00 · ${v} ${t("bookingsWord")}`)}</div>
       <div class="chart-card"><h3>${esc(t("ch.weekday"))}</h3><p>&nbsp;</p>${bars(wd, order.map((i) => t("days")[i]), (i, v) => `${t("daysLong")[order[i]]} · ${v} ${t("bookingsWord")}`)}</div>

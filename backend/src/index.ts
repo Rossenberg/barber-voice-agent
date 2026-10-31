@@ -1104,8 +1104,9 @@ async function shopState(env: Env, biz: number) {
  */
 async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown, barberId = 0) {
   const today = localNow().date;
-  const to = isDate(toRaw) ? toRaw : today;
-  const from = isDate(fromRaw) && fromRaw <= to ? fromRaw : addDays(to, -29);
+  let to = isDate(toRaw) ? toRaw : today;
+  let from = isDate(fromRaw) ? fromRaw : addDays(to, -29);
+  if (from > to) [from, to] = [to, from]; // dates picked the other way round
   const settings = await getSettings(env.DB, biz);
   const services = await getServices(env.DB, biz, false);
   type B = { id: number; service_id: string; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; status: string; source: string; conversation_id: string | null; created_at: string; barber_id: number | null };
@@ -1131,7 +1132,7 @@ async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown
     const c = clients.get(key(b)) ?? { name: b.client_name, phone: b.phone, visits: 0, spent: 0, last: b.date };
     c.visits++;
     c.spent += priceOf(b.service_id);
-    if (b.date > c.last) c.last = b.date;
+    if (b.date >= c.last) { c.last = b.date; c.name = b.client_name ?? c.name; } // the name from their latest booking
     clients.set(key(b), c);
   }
   const byHour = Array(24).fill(0), byWeekday = Array(7).fill(0);
