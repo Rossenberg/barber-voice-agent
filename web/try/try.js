@@ -3,7 +3,7 @@ const T = {
   ru: {
     back: "← В кабинет", hint: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.",
     notFound: "Бизнес не найден", on: "Ассистент включён", off: "Ассистент выключен", ready: "Готов", offState: "Выключен", disabled: "Ассистент выключен в кабинете.",
-    placeholder: "Напишите сообщение…", chatError: "Не удалось ответить, попробуйте ещё раз.", booked: "Записано ✓",
+    placeholder: "Напишите сообщение…", greet: "Здравствуйте! Это {shop}, я Ани. Чем могу помочь?", chatError: "Не удалось ответить, попробуйте ещё раз.", booked: "Записано ✓",
   },
   hy: {
     back: "← Վերադառնալ էջ", hint: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Գրանցումը կհայտնվի Ձեր օրացույցում։",
@@ -43,7 +43,7 @@ async function load() {
   $("status").dataset.state = config.enabled ? "idle" : "off";
   $("status").textContent = t(config.enabled ? "ready" : "offState");
   if (!config.enabled) return add(t("disabled"), "tool");
-  const greeting = config.greeting.replaceAll("{shop}", config.shop_name).replaceAll("{name}", "Անի");
+  const greeting = (lang === "ru" ? t("greet") : config.greeting).replaceAll("{shop}", config.shop_name).replaceAll("{name}", "Անի");
   history.push({ role: "assistant", content: greeting });
   add(greeting, "agent");
 }

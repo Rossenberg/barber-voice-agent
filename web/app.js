@@ -29,6 +29,7 @@ const T = {
     "prices.title": "Դեմո բարբերշոփի գները", "prices.sub": "Այս գները օգնականը վերցնում է անձնական էջից։ Յուրաքանչյուր բիզնես ունի իրենը։",
     "pill.on": "Օգնականը միացված է", "pill.off": "Օգնականն անջատված է",
     "status.ready": "Պատրաստ է", "status.off": "Անջատված է",
+    "chat.greet": "", "chip.1": "Ի՞նչ արժե մորուքի մշակումը", "chip.2": "Վաղը առավոտյան տեղ կա՞", "chip.3": "Վաղը ժամը 6-ին ֆեյդի համար տեղ կա՞",
     "chat.placeholder": "Գրեք հաղորդագրություն…", "chat.error": "Չհաջողվեց պատասխանել, փորձեք կրկին։", "chat.booked": "Գրանցված է ✓", "chat.off": "Բիզնեսն անջատել է օգնականին։",
     "feat.kicker": "Հնարավորություններ", "feat.title": "Աշխատում է լավագույն ադմինիստրատորի պես։ Միայն չի հոգնում։",
     "f1.t": "Հասկանում է կենդանի լեզուն", "f1.d": "Խոսակցական հայերեն, լատինատառ հայերեն, ժարգոն, ռուսերեն բառեր, ուղղումներ ընթացքում՝ «ոչ թե վաղը, այլ վաղը չէ մյուս օրը»։",
@@ -89,6 +90,7 @@ const T = {
     "prices.title": "Прайс демо-барбершопа", "prices.sub": "Эти цены ассистент берёт из личного кабинета. У каждого бизнеса — свои.",
     "pill.on": "Ассистент включён", "pill.off": "Ассистент выключен",
     "status.ready": "Готов", "status.off": "Выключен",
+    "chat.greet": "Здравствуйте! Это {shop}, я Ани. Чем могу помочь?", "chip.1": "Сколько стоит оформление бороды?", "chip.2": "Есть место завтра утром?", "chip.3": "Можно завтра в 6 на фейд?",
     "chat.placeholder": "Напишите сообщение…", "chat.error": "Не удалось ответить, попробуйте ещё раз.", "chat.booked": "Записано ✓", "chat.off": "Бизнес выключил ассистента.",
     "feat.kicker": "Возможности", "feat.title": "Работает как лучший администратор. Только не устаёт.",
     "f1.t": "Понимает живой язык", "f1.d": "Разговорный армянский, армянский латиницей, сленг, русские слова вперемешку, исправления на ходу — «нет, не завтра, послезавтра».",
@@ -214,9 +216,12 @@ function chatAdd(text, cls) {
 }
 
 async function openChat() {
-  if (chatHistory.length || chatLog.childElementCount) return;
+  // the greeting follows the page language (Armenian: the owner's own greeting); restarted on a language switch until they write
+  if (chatHistory.some((m) => m.role === "user")) return;
+  chatHistory = [];
+  chatLog.replaceChildren();
   if (config && !config.enabled) return chatAdd(t("chat.off"), "tool");
-  const greeting = (config?.greeting ?? "Բարև ձեզ։ Ինչո՞վ օգնեմ։").replaceAll("{shop}", config?.shop_name ?? "").replaceAll("{name}", "Անի");
+  const greeting = (lang === "ru" ? t("chat.greet") : config?.greeting ?? "Բարև Ձեզ։ Ինչո՞վ օգնեմ։").replaceAll("{shop}", config?.shop_name ?? "").replaceAll("{name}", "Անի");
   chatHistory.push({ role: "assistant", content: greeting });
   chatAdd(greeting, "agent");
 }
@@ -268,6 +273,7 @@ document.querySelectorAll("#langs button").forEach((b) =>
     lang = b.dataset.lang;
     store.set("bvLang", lang);
     applyLang();
+    if (config) openChat();
   }),
 );
 
