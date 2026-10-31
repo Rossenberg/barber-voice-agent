@@ -130,6 +130,13 @@
         <div class="set-card">
           <label class="switch-row"><span><b data-i18n="set.enabled">Ассистент отвечает клиентам</b><small data-i18n="set.enabledHint">Выключите — и он вежливо попросит перезвонить позже.</small></span><input type="checkbox" name="enabled" class="switch"></label>
         </div>
+        <div class="set-card" id="igCard">
+          <h3>Instagram</h3>
+          <p class="muted" id="igStatus" data-i18n="ig.off">Подключите Instagram — ассистент будет отвечать клиентам в Direct и записывать их в календарь.</p>
+          <a class="btn btn-primary" id="igConnect" data-i18n="ig.connect">Подключить Instagram</a>
+          <button class="link-btn" type="button" id="igDisconnect" hidden data-i18n="ig.disconnect">Отключить Instagram</button>
+          <p class="muted small" data-i18n="ig.hint">Нужен профессиональный аккаунт Instagram (Бизнес или Автор), привязанный к странице Facebook.</p>
+        </div>
         <div class="set-card">
           <h3 data-i18n="set.business">Бизнес</h3>
           <label class="field"><span data-i18n="set.name">Название</span><input class="input" name="shop_name" maxlength="60"></label>

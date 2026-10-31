@@ -6,6 +6,7 @@ import {
   cleanText,
   daysBetween,
   isDate,
+  hmac,
   json,
   localNow,
   makeCallToken,
@@ -1254,6 +1255,47 @@ async function instagramReply(env: Env, igUserId: string, senderId: string, mid:
     .bind(account.business_id, `chat-${chatId}`, history.length, `instagram send: ${note}`).run();
 }
 
+// «Connect Instagram» in the cabinet: Meta's Facebook Login for Business with the app's Instagram configuration.
+// The owner picks their Facebook Page + Instagram account, Meta sends a code to /api/instagram/callback, and we keep
+// the business token; replies go out through the Page linked to that Instagram account.
+const META_APP_ID = "926376360409216";
+const META_LOGIN_CONFIG = "1087680024268448";
+const META_GRAPH = "https://graph.facebook.com/v23.0";
+const igRedirect = (req: Request) => `${new URL(req.url).origin}/api/instagram/callback`;
+
+async function instagramConnectUrl(env: Env, req: Request, businessId: number) {
+  const exp = Date.now() + 15 * 60_000;
+  const state = `${businessId}.${exp}.${await hmac(env.SESSION_SECRET, `ig:${businessId}:${exp}`)}`;
+  const q = new URLSearchParams({ client_id: META_APP_ID, config_id: META_LOGIN_CONFIG, redirect_uri: igRedirect(req), response_type: "code", override_default_response_type: "true", state });
+  return `https://www.facebook.com/v23.0/dialog/oauth?${q}`;
+}
+
+async function instagramCallback(env: Env, req: Request): Promise<Response> {
+  const url = new URL(req.url);
+  const back = (result: string) => new Response(null, { status: 302, headers: { location: `/app/?ig=${result}` } });
+  const user = await currentUser(env, req);
+  const [biz, exp, sig] = (url.searchParams.get("state") ?? "").split(".");
+  // the login must have started in this owner's cabinet, recently
+  if (!user || !biz || Number(biz) !== user.business_id || Number(exp) < Date.now() || !safeEqual(sig ?? "", await hmac(env.SESSION_SECRET, `ig:${biz}:${exp}`))) return back("failed");
+  const code = url.searchParams.get("code");
+  if (!code || !env.INSTAGRAM_APP_SECRET) return back(url.searchParams.get("error") ? "cancelled" : "failed");
+  const tokenRes = await fetch(`${META_GRAPH}/oauth/access_token?${new URLSearchParams({ client_id: META_APP_ID, client_secret: env.INSTAGRAM_APP_SECRET, redirect_uri: igRedirect(req), code })}`);
+  const tokenData = (await tokenRes.json()) as { access_token?: string; expires_in?: number; error?: { message?: string } };
+  if (!tokenData.access_token) { console.error("instagram token", tokenData.error?.message); return back("failed"); }
+  const token = tokenData.access_token;
+  const pages = (await (await fetch(`${META_GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account{id,username}`, { headers: { authorization: `Bearer ${token}` } })).json()) as { data?: { id: string; access_token: string; instagram_business_account?: { id: string; username?: string } }[] };
+  const linked = (pages.data ?? []).filter((p) => p.instagram_business_account);
+  if (!linked.length) return back("nopage");
+  for (const p of linked) {
+    const ig = p.instagram_business_account!;
+    await env.DB.prepare("INSERT OR REPLACE INTO instagram_accounts (ig_user_id, business_id, username, token, token_expires_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(ig.id, user.business_id, ig.username ?? null, token, tokenData.expires_in ? Date.now() + tokenData.expires_in * 1000 : null).run();
+    // ask Meta to send this Page's Instagram messages to our webhook
+    await fetch(`${META_GRAPH}/${p.id}/subscribed_apps?subscribed_fields=messages`, { method: "POST", headers: { authorization: `Bearer ${p.access_token}` } }).catch(() => {});
+  }
+  return back("ok");
+}
+
 /** The owner's cabinet (/app): their own business only. */
 async function cabinet(env: Env, req: Request, path: string): Promise<Response> {
   const user = await currentUser(env, req);
@@ -1261,6 +1303,14 @@ async function cabinet(env: Env, req: Request, path: string): Promise<Response> 
   if (path === "/api/app/me" && req.method === "GET") {
     const me = await env.DB.prepare("SELECT u.name, u.email, u.lang, b.slug, b.category FROM users u JOIN businesses b ON b.id = u.business_id WHERE u.id = ?").bind(user.id).first();
     return json(me);
+  }
+  if (path === "/api/app/instagram" && req.method === "GET") {
+    const { results } = await env.DB.prepare("SELECT ig_user_id, username FROM instagram_accounts WHERE business_id = ?").bind(user.business_id).all<{ ig_user_id: string; username: string | null }>();
+    return json({ accounts: results, connect_url: await instagramConnectUrl(env, req, user.business_id) });
+  }
+  if (path === "/api/app/instagram/disconnect" && req.method === "POST") {
+    await env.DB.prepare("DELETE FROM instagram_accounts WHERE business_id = ?").bind(user.business_id).run();
+    return json({ ok: true });
   }
   const body = req.method === "GET" ? Object.fromEntries(new URL(req.url).searchParams) : ((await req.json().catch(() => ({}))) as Record<string, unknown>);
   return shopApi(env, user.business_id, req.method, path.slice("/api/app/".length), body);
@@ -1310,6 +1360,8 @@ const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;")
 async function reviewFinishedConversations(env: Env, force = false) {
   if (!force && Date.now() - lastSweep < 60_000) return;
   lastSweep = Date.now();
+  // the privacy policy promises: call audio is kept 7 days at most
+  await env.DB.prepare("UPDATE realtime_log SET audio = NULL, audio_type = NULL WHERE audio IS NOT NULL AND created_at < datetime('now', '-7 days')").run();
   const { results } = await env.DB.prepare(
     `SELECT call_id FROM realtime_log WHERE created_at > ? GROUP BY call_id
      HAVING MAX(created_at) < datetime('now', '-3 minutes') AND SUM(role = 'user') >= 2
@@ -1482,6 +1534,7 @@ export default {
       }
 
       if (path === "/webhooks/instagram") return await instagramWebhook(env, req, ctx);
+      if (path === "/api/instagram/callback" && req.method === "GET") return await instagramCallback(env, req);
       if (path.startsWith("/api/admin/")) return await admin(env, req, path);
       if (path.startsWith("/api/auth/") || path.startsWith("/api/app/")) {
         // cookies ride along on every request to this site: writes must come from our own pages

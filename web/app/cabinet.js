@@ -35,6 +35,9 @@ const T = {
     "set.business": "Бизнес", "set.name": "Название", "set.spoken": "Как ассистент произносит название (армянскими буквами)", "set.address": "Адрес",
     "set.barbers": "Сколько клиентов можно принять одновременно (мастеров)", "set.hours": "Часы работы", "set.extra": "Что ещё должен знать ассистент", "set.extraHint": "Парковка, оплата картой, акции — коротко, любым языком.",
     "set.saved": "Сохранено.",
+    "ig.off": "Подключите Instagram — ассистент будет отвечать клиентам в Direct и записывать их в календарь.", "ig.on": "Подключено:", "ig.connect": "Подключить Instagram", "ig.reconnect": "Переподключить", "ig.disconnect": "Отключить Instagram",
+    "ig.hint": "Нужен профессиональный аккаунт Instagram (Бизнес или Автор), привязанный к странице Facebook.", "ig.ok": "Instagram подключён. Ассистент уже отвечает в Direct.", "ig.failed": "Не удалось подключить Instagram. Попробуйте ещё раз.",
+    "ig.cancelled": "Подключение отменено.", "ig.nopage": "Не нашли Instagram, привязанный к странице Facebook. Привяжите его в настройках Instagram и попробуйте снова.", "ig.offAsk": "Отключить Instagram? Ассистент перестанет отвечать в Direct.",
     save: "Сохранить",
     "test.title": "Проверьте своего ассистента", "test.sub": "Он уже знает ваши услуги, цены и часы. Позвоните или напишите — запись появится в вашем календаре.",
     "test.call": "Позвонить и написать", "test.copy": "Скопировать ссылку", "test.copied": "Ссылка скопирована", "test.note": "Подключение вашего телефонного номера — следующий шаг. Пока проверяйте по этой ссылке.",
@@ -76,6 +79,9 @@ const T = {
     "set.business": "Բիզնես", "set.name": "Անվանում", "set.spoken": "Ինչպես է օգնականն արտասանում անվանումը (հայերեն տառերով)", "set.address": "Հասցե",
     "set.barbers": "Քանի հաճախորդ կարելի է ընդունել միաժամանակ (վարպետներ)", "set.hours": "Աշխատանքային ժամեր", "set.extra": "Ինչ ևս պետք է իմանա օգնականը", "set.extraHint": "Կայանատեղի, քարտով վճարում, ակցիաներ՝ կարճ, ցանկացած լեզվով։",
     "set.saved": "Պահպանված է։",
+    "ig.off": "Միացրեք Instagram-ը, և օգնականը կպատասխանի հաճախորդներին Direct-ում ու կգրանցի նրանց օրացույցում։", "ig.on": "Միացված է՝", "ig.connect": "Միացնել Instagram-ը", "ig.reconnect": "Կրկին միացնել", "ig.disconnect": "Անջատել Instagram-ը",
+    "ig.hint": "Անհրաժեշտ է Instagram-ի մասնագիտական հաշիվ (Բիզնես կամ Հեղինակ)՝ կապված Facebook էջին։", "ig.ok": "Instagram-ը միացված է։ Օգնականն արդեն պատասխանում է Direct-ում։", "ig.failed": "Չհաջողվեց միացնել Instagram-ը։ Փորձեք կրկին։",
+    "ig.cancelled": "Միացումը չեղարկվեց։", "ig.nopage": "Facebook էջին կապված Instagram չգտանք։ Կապեք այն Instagram-ի կարգավորումներում և փորձեք կրկին։", "ig.offAsk": "Անջատե՞լ Instagram-ը։ Օգնականը կդադարի պատասխանել Direct-ում։",
     save: "Պահպանել",
     "test.title": "Ստուգեք Ձեր օգնականին", "test.sub": "Նա արդեն գիտի Ձեր ծառայությունները, գներն ու ժամերը։ Զանգեք կամ գրեք, և գրանցումը կհայտնվի Ձեր օրացույցում։",
     "test.call": "Զանգել և գրել", "test.copy": "Պատճենել հղումը", "test.copied": "Հղումը պատճենված է", "test.note": "Ձեր հեռախոսահամարի միացումը հաջորդ քայլն է։ Առայժմ ստուգեք այս հղումով։",
@@ -245,6 +251,7 @@ document.querySelectorAll(".cab-tabs button").forEach((b) => b.addEventListener(
   document.querySelectorAll("#cab .pane").forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.tab));
   if (b.dataset.tab === "calendar") reload().catch(() => {});
   if (b.dataset.tab === "stats") loadStats();
+  if (b.dataset.tab === "settings") loadInstagram();
 }));
 
 const hoursOf = (d) => state.settings.hours[weekday(d)];
@@ -392,6 +399,23 @@ $("saveServices").addEventListener("click", async () => {
 });
 
 // settings and hours
+async function loadInstagram() {
+  try {
+    const d = await api("/api/app/instagram");
+    $("igConnect").href = d.connect_url;
+    const on = d.accounts.length > 0;
+    $("igStatus").textContent = on ? `${t("ig.on")} ${d.accounts.map((a) => "@" + (a.username ?? a.ig_user_id)).join(", ")}` : t("ig.off");
+    $("igConnect").textContent = t(on ? "ig.reconnect" : "ig.connect");
+    $("igConnect").classList.toggle("btn-primary", !on);
+    $("igConnect").classList.toggle("btn-ghost", on);
+    $("igDisconnect").hidden = !on;
+  } catch {}
+}
+$("igDisconnect").addEventListener("click", async () => {
+  if (!confirm(t("ig.offAsk"))) return;
+  try { await api("/api/app/instagram/disconnect", {}); await loadInstagram(); } catch (e) { toast(errText(e), true); }
+});
+
 function renderSettings() {
   const f = $("setForm"), s = state.settings;
   f.enabled.checked = s.enabled;
@@ -439,6 +463,11 @@ document.querySelectorAll("#langs button").forEach((b) => b.addEventListener("cl
 // ---------------------------------------------------------------- start
 applyLang();
 const q = new URLSearchParams(location.search);
+if (q.get("ig")) {
+  toast(t(`ig.${q.get("ig")}`), q.get("ig") !== "ok");
+  history.replaceState(null, "", "/app/");
+  setTimeout(() => document.querySelector('[data-tab="settings"]')?.click(), 800);
+}
 if (q.get("verify")) {
   toast(t(q.get("verify") === "ok" ? "verify.ok" : "verify.failed"), q.get("verify") !== "ok");
   history.replaceState(null, "", "/app/");
