@@ -32,6 +32,8 @@ interface Env {
   TELEGRAM_BOT_TOKEN?: string; // call reviews go to the owner's Telegram (optional)
   TELEGRAM_CHAT_ID?: string;
   RESEND_API_KEY?: string; // cabinet emails: confirm the address, reset the password
+  INSTAGRAM_APP_SECRET?: string; // signs Instagram webhooks (Meta app → App settings → Basic)
+  INSTAGRAM_VERIFY_TOKEN?: string; // the code we give Meta when it checks the webhook address
 }
 
 interface Settings {
@@ -158,6 +160,23 @@ const PARTS_OF_DAY: Record<string, [number, number]> = { morning: [0, 12 * 60], 
 
 const nearest = (starts: number[], target: number, count = 3) =>
   [...starts].sort((a, b) => Math.abs(a - target) - Math.abs(b - target)).slice(0, count).sort((a, b) => a - b).map(toHHMM);
+
+/** Free starts as ranges of consecutive slots: «10:00–13:30, 15:00–19:00» (the last start of each range). */
+function freeRanges(starts: number[]) {
+  const out: [number, number][] = [];
+  for (const m of starts) {
+    const last = out[out.length - 1];
+    if (last && m - last[1] === GRID_MIN) last[1] = m; else out.push([m, m]);
+  }
+  return out;
+}
+const rangesText = (starts: number[]) => freeRanges(starts).map(([a, b]) => (a === b ? toHHMM(a) : `${toHHMM(a)}–${toHHMM(b)}`));
+// «from ten until half past eleven»: ablative and accusative forms of the same words as timeHy
+const HOUR_FROM = ["", "մեկից", "երկուսից", "երեքից", "չորսից", "հինգից", "վեցից", "յոթից", "ութից", "իննից", "տասից", "տասնմեկից", "տասներկուսից"];
+const HOUR_TO = ["", "մեկը", "երկուսը", "երեքը", "չորսը", "հինգը", "վեցը", "յոթը", "ութը", "ինը", "տասը", "տասնմեկը", "տասներկուսը"];
+function timeFromHy(min: number) { const h = Math.floor(min / 60) % 12 || 12, m = min % 60; return m === 0 ? HOUR_FROM[h] : `${HOUR_PAST[h]} անց ${m === 30 ? "կեսից" : `${m} րոպեից`}`; }
+function timeToHy(min: number) { const h = Math.floor(min / 60) % 12 || 12, m = min % 60; return m === 0 ? HOUR_TO[h] : `${HOUR_PAST[h]} անց ${m === 30 ? "կեսը" : `${m} րոպեն`}`; }
+const rangesHy = (starts: number[]) => freeRanges(starts).map(([a, b]) => (a === b ? timeHy(a) : `${timeFromHy(a)} մինչև ${timeToHy(b)}`));
 
 /** Up to `max` times spread across the day. */
 function spread(starts: number[], max = 6): string[] {
@@ -323,8 +342,12 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
   return {
     ...base,
     open: true,
+    has_free_time: starts.length > 0,
     free_times: spread(starts),
     free_times_hy: hy(spread(starts)),
+    free_ranges: rangesText(starts),
+    free_ranges_hy: rangesHy(starts),
+    times_note: "No time asked yet: say the day has free time and ask which time suits them — don't pick times for them. Read free_ranges only if they ask for all free times.",
     ...earliestFree(date, starts),
     ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
   };
@@ -852,7 +875,15 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
     .map((m) => ({ role: m.role as "user" | "assistant", content: cleanText(m.content, 1000) }));
   if (!history.length || history[history.length - 1].role !== "user") return json({ error: "bad_request" }, 400);
   const model = CHAT_MODELS.includes(body.model ?? "") ? body.model! : CHAT_MODEL;
+  const out = await chatTurn(env, biz, chatId, history, model);
+  return "error" in out ? json({ error: out.error }, 502) : json({ id: chatId, reply: out.reply, booked: out.booked, model });
+}
 
+/**
+ * One chat reply with the calendar tools — the website chat and Instagram Direct share it.
+ * chatId is the conversation (bookings made in it are the writer's own).
+ */
+async function chatTurn(env: Env, biz: number, chatId: string, history: { role: "user" | "assistant"; content: string }[], model = CHAT_MODEL): Promise<{ reply: string; booked: boolean } | { error: string }> {
   const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { biz, name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
   // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
   // remind the model what it booked here, so a later change replaces that booking instead of failing.
@@ -885,7 +916,7 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
     }
     if (!res.ok) {
       console.error("chat", res.status, (await res.text()).slice(0, 300));
-      return json({ error: "chat_failed" }, 502);
+      return { error: "chat_failed" };
     }
     const data = (await res.json()) as { choices: { message: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[]; usage?: { prompt_tokens: number; completion_tokens: number; prompt_tokens_details?: { cached_tokens?: number } } };
     // what each chat step costs, for the price per conversation
@@ -910,9 +941,9 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
     const reply = (msg.content ?? "").replace(/[‹›]/g, "").trim(); // phrasebook slot marks
     await logLine("user", history[history.length - 1].content);
     await logLine("agent", reply, Date.now() - t0);
-    return json({ id: chatId, reply, booked, model });
+    return { reply, booked };
   }
-  return json({ error: "too_many_steps" }, 502);
+  return { error: "too_many_steps" };
 }
 
 // ---------------------------------------------------------------- dashboard
@@ -1157,6 +1188,66 @@ async function newBusiness(env: Env, name: string, category: string): Promise<nu
   return biz;
 }
 
+// ---------------------------------------------------------------- Instagram Direct
+
+const IG_API = "https://graph.instagram.com/v23.0";
+
+/** Meta checks the webhook address once, then posts every new Direct message here. */
+async function instagramWebhook(env: Env, req: Request, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(req.url);
+  if (req.method === "GET") {
+    const ok = url.searchParams.get("hub.mode") === "subscribe" && !!env.INSTAGRAM_VERIFY_TOKEN && url.searchParams.get("hub.verify_token") === env.INSTAGRAM_VERIFY_TOKEN;
+    return ok ? new Response(url.searchParams.get("hub.challenge") ?? "") : new Response("forbidden", { status: 403 });
+  }
+  const raw = await req.text();
+  // only Meta can sign with the app secret
+  if (!env.INSTAGRAM_APP_SECRET) return new Response("not configured", { status: 503 });
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.INSTAGRAM_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = [...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (!safeEqual(req.headers.get("x-hub-signature-256") ?? "", `sha256=${sig}`)) return new Response("bad signature", { status: 401 });
+  const body = JSON.parse(raw) as { entry?: { id: string; messaging?: { sender?: { id: string }; message?: { mid?: string; text?: string; is_echo?: boolean } }[] }[] };
+  for (const entry of body.entry ?? []) {
+    for (const m of entry.messaging ?? []) {
+      if (!m.message?.text || m.message.is_echo || !m.sender?.id || !m.message.mid) continue;
+      ctx.waitUntil(instagramReply(env, entry.id, m.sender.id, m.message.mid, m.message.text).catch((err) => console.error("instagram", err)));
+    }
+  }
+  return new Response("ok"); // answer Meta fast; the reply goes out in the background
+}
+
+async function instagramReply(env: Env, igUserId: string, senderId: string, mid: string, text: string) {
+  if (senderId === igUserId) return;
+  const account = await env.DB.prepare("SELECT business_id, token FROM instagram_accounts WHERE ig_user_id = ?").bind(igUserId).first<{ business_id: number; token: string }>();
+  if (!account) {
+    await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text) VALUES (1, 'instagram-unbound', 0, 'event', ?)").bind(`message for unknown Instagram account ${igUserId} from ${senderId}`).run();
+    return;
+  }
+  const fresh = await env.DB.prepare("INSERT OR IGNORE INTO instagram_seen (mid) VALUES (?)").bind(mid).run();
+  if (!fresh.meta.changes) return; // a retry of a message already answered
+  // the conversation so far (Instagram allows replies within 24 h of the client's last message)
+  const chatId = `ig-${senderId}`;
+  const { results } = await env.DB.prepare(
+    "SELECT role, text FROM realtime_log WHERE call_id = ? AND role IN ('user', 'agent') AND created_at > datetime('now', '-24 hours') ORDER BY id DESC LIMIT 20",
+  ).bind(`chat-${chatId}`).all<{ role: string; text: string }>();
+  const history = results.reverse().map((r) => ({ role: r.role === "user" ? ("user" as const) : ("assistant" as const), content: r.text }));
+  history.push({ role: "user", content: cleanText(text, 1000) });
+  const out = await chatTurn(env, account.business_id, chatId, history);
+  const reply = "error" in out ? "Ներողություն, հիմա չեմ կարողանում պատասխանել։ Փորձեք մի փոքր ուշ։" : out.reply;
+  // The stored token is the business's system user: it sends through the Facebook Page linked to the
+  // Instagram account, with that Page's own token (the only way Meta accepted the reply).
+  const payload = JSON.stringify({ recipient: { id: senderId }, message: { text: reply.slice(0, 1000) } });
+  let note = "";
+  const pages = (await (await fetch("https://graph.facebook.com/v23.0/me/accounts?fields=id,access_token,instagram_business_account", { headers: { authorization: `Bearer ${account.token}` } })).json()) as { data?: { id: string; access_token: string; instagram_business_account?: { id: string } }[] };
+  const page = pages.data?.find((p) => p.instagram_business_account?.id === igUserId);
+  if (!page) note = `no Facebook Page linked to ${igUserId} for this token`;
+  else {
+    const res = await fetch(`https://graph.facebook.com/v23.0/${page.id}/messages`, { method: "POST", headers: { authorization: `Bearer ${page.access_token}`, "content-type": "application/json" }, body: payload });
+    note = res.ok ? "sent" : `${res.status} ${(await res.text()).slice(0, 300)}`;
+  }
+  await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text) VALUES (?, ?, ?, 'event', ?)")
+    .bind(account.business_id, `chat-${chatId}`, history.length, `instagram send: ${note}`).run();
+}
+
 /** The owner's cabinet (/app): their own business only. */
 async function cabinet(env: Env, req: Request, path: string): Promise<Response> {
   const user = await currentUser(env, req);
@@ -1384,6 +1475,7 @@ export default {
         return json({ error: "not_found" }, 404);
       }
 
+      if (path === "/webhooks/instagram") return await instagramWebhook(env, req, ctx);
       if (path.startsWith("/api/admin/")) return await admin(env, req, path);
       if (path.startsWith("/api/auth/") || path.startsWith("/api/app/")) {
         // cookies ride along on every request to this site: writes must come from our own pages
