@@ -1,6 +1,12 @@
-# BarberVoice — Armenian voice assistant for barbershops
+# UMNIK — AI chat assistant for businesses (website chat + Instagram Direct)
 
-Landing page with a live voice demo + barber dashboard. Live: https://barber-voice-agent.weboostai.workers.dev (dashboard at `/dashboard/`).
+Landing page with a live chat demo + owner cabinet (`/app/`). Live: https://barber-voice-agent.weboostai.workers.dev
+
+> **Voice is off the live site since 2026-11-01** (Armenian recognition isn't reliable enough yet). All voice code is kept in
+> [`voice-lab/`](voice-lab/README.md); backend voice endpoints answer 404 unless `VOICE_ENABLED=1`. Run it locally with `scripts/voice-lab.sh`.
+> The site as it was with voice: git tag `voice-archive-2026-11-01`. The notes below the line describe the voice setup.
+
+---
 
 - **Voice:** ElevenLabs Agents — Gemini 3.8 Flash, TTS `eleven_v4_turbo` (Jessica = Անի, George = Արամ), ASR Scribe Realtime (high) with slang keywords. Starts in Armenian, switches to English/Russian.
 - **Backend:** Cloudflare Worker + D1 (`backend/`). Serves `web/` and the API:

@@ -16,7 +16,7 @@
     main { padding: 20px 0 60px; }
     .try-wrap { width: min(520px, 100% - 32px); margin-inline: auto; display: grid; gap: 14px; }
     .back { font-weight: 700; color: var(--green-2); text-decoration: none; font-size: 14.5px; }
-    #transcript { max-height: 340px; }
+    .hint { font-size: 14px; color: var(--muted); margin: 0; }
     .err-card { padding: 28px 20px; border-radius: 24px; background: #fff; border: 1px solid var(--line); text-align: center; }
   </style>
 </head>
@@ -24,6 +24,7 @@
   <main>
     <div class="try-wrap">
       <a class="back" href="/app/" data-i18n="back">← В кабинет</a>
+      <p class="hint" data-i18n="hint">Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.</p>
       <div class="demo" id="assistant" hidden>
         <div class="demo-head">
           <div class="demo-shop">
@@ -32,31 +33,7 @@
           </div>
           <span class="status" id="status" data-state="idle"></span>
         </div>
-        <div class="modes" role="tablist">
-          <button role="tab" data-mode="call" aria-selected="true"><span data-i18n="call">Позвонить</span></button>
-          <button role="tab" data-mode="chat" aria-selected="false"><span data-i18n="chat">Написать</span></button>
-        </div>
-
-        <div id="callPane">
-          <div class="voices" role="group">
-            <button class="voice" data-voice="female" aria-pressed="true"><span class="av">Ա</span><span><b data-i18n="ani">Ани</b><span data-i18n="female">Женский голос</span></span></button>
-            <button class="voice" data-voice="male" aria-pressed="false"><span class="av">Ա</span><span><b data-i18n="aram">Арам</b><span data-i18n="male">Мужской голос</span></span></button>
-          </div>
-          <div class="stage"><div class="orb" id="orb" data-mode="idle"><div class="ring"></div><div class="ring r2"></div><div class="halo"></div><div class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 10v4M10.5 7v10M14 9v6M17.5 11v2"/></svg></div></div></div>
-          <p class="label" id="label"></p>
-          <div class="call-row">
-            <button class="btn btn-primary btn-lg" id="startBtn"><span data-i18n="call">Позвонить</span></button>
-            <button class="btn btn-end btn-lg" id="endBtn" hidden><span data-i18n="end">Завершить</span></button>
-          </div>
-          <div class="transcript" id="transcript"></div>
-          <details class="caller" open>
-            <summary data-i18n="callerSum">Номер звонящего</summary>
-            <input class="input" id="callerPhone" type="tel" inputmode="tel" placeholder="+374 91 23 45 67">
-            <p data-i18n="callerHint">По этому номеру ассистент находит записи, чтобы перенести или отменить их. На настоящей линии номер определится сам.</p>
-          </details>
-        </div>
-
-        <div class="chat" id="chatPane" hidden>
+        <div class="chat" id="chatPane">
           <div class="transcript chat-log" id="chatLog" aria-live="polite"></div>
           <form class="chat-form" id="chatForm">
             <input class="input" id="chatInput" autocomplete="off" maxlength="500">
@@ -68,8 +45,6 @@
     </div>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
   <script type="module" src="/try/try.js"></script>
 </body>
 </html>

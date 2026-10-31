@@ -1,4 +1,4 @@
-// UMNIK cabinet: sign up / log in, then the owner's own calendar, services, hours and a link to test their assistant.
+// UMNIK cabinet: sign up / log in, then the owner's own calendar, services, hours and a link to test their assistant's chat.
 const T = {
   ru: {
     logout: "Выйти",
@@ -20,18 +20,18 @@ const T = {
     "st.today": "Сегодня", "st.7": "7 дней", "st.30": "30 дней", "st.month": "Этот месяц", "st.90": "3 месяца", "st.next": "Впереди",
     "k.revenue": "Заработано", "k.revenueHint": "за прошедшие визиты", "k.expected": "ещё ожидается", "k.bookings": "Записей", "k.cancelled": "отменено",
     "k.clients": "Клиентов", "k.new": "новых", "k.returning": "Пришли повторно", "k.returningHint": "2 и более визита", "k.avg": "Средний чек",
-    "k.after": "Записи в нерабочее время", "k.afterHint": "их принял ассистент, когда вы были закрыты", "k.conv": "Разговоров ассистента", "k.convHint": "звонков · чатов · минут",
+    "k.after": "Записи в нерабочее время", "k.afterHint": "их принял ассистент, когда вы были закрыты", "k.conv": "Диалогов ассистента", "k.convHint": "в чате на сайте и в Instagram",
     "ch.day": "Записи по дням", "ch.dayHint": "наведите на столбик, чтобы увидеть число", "ch.hour": "Самые активные часы", "ch.weekday": "Самые активные дни",
-    "ch.services": "Популярные услуги", "ch.channels": "Откуда записи", "ch.call": "Звонок", "ch.chat": "Чат", "ch.manual": "Вручную",
+    "ch.services": "Популярные услуги", "ch.channels": "Откуда записи", "ch.call": "Звонок", "ch.chat": "Чат на сайте", "ch.instagram": "Instagram", "ch.manual": "Вручную",
     "ch.clients": "Постоянные клиенты", "ch.barbers": "По барберам", "ch.noBarber": "Без барбера", "ch.client": "Клиент", "ch.visits": "Визитов", "ch.spent": "Сумма",
     "st.peak": "Пик:", "st.empty": "За этот период записей нет.", "st.note": "Суммы — по текущим ценам вашего прайса.", "bookingsWord": "зап.",
     "cal.add": "Запись", "cal.block": "Закрыть часы", "cal.closedDay": "Выходной", "cal.empty": "Записей пока нет", "cal.emptyHint": "Записи ассистента появятся здесь сами.",
     "cal.closed": "Закрыто", "cal.manual": "вручную", "cal.cancelled": "отменена", "cal.cancelAsk": "Отменить запись?", "cal.unblockAsk": "Открыть эти часы снова?",
     "cal.today": "Сегодня", "cal.tomorrow": "Завтра",
     "dlg.booking": "Новая запись", "dlg.block": "Закрыть часы", "dlg.service": "Услуга", "dlg.time": "Время", "dlg.client": "Имя клиента", "dlg.phone": "Телефон", "dlg.from": "С", "dlg.to": "До", "dlg.note": "Комментарий", "dlg.allDay": "Весь день",
-    "srv.title": "Услуги и цены", "srv.sub": "Ассистент называет только эти услуги и цены. Армянское название он произносит клиенту.", "srv.add": "Услуга",
+    "srv.title": "Услуги и цены", "srv.sub": "Ассистент называет только эти услуги и цены. Армянское название он пишет клиенту.", "srv.add": "Услуга",
     "srv.hy": "Название по-армянски", "srv.ru": "Название по-русски", "srv.dur": "Минут", "srv.price": "Цена, ֏", "srv.max": "До, ֏", "srv.on": "Активна", "srv.del": "Удалить", "srv.saved": "Сохранено. Ассистент уже знает новые цены.",
-    "set.enabled": "Ассистент отвечает клиентам", "set.enabledHint": "Выключите — и он вежливо попросит перезвонить позже.",
+    "set.enabled": "Ассистент отвечает клиентам", "set.enabledHint": "Выключите — и он вежливо попросит написать позже.",
     "set.business": "Бизнес", "set.name": "Название", "set.spoken": "Как ассистент произносит название (армянскими буквами)", "set.address": "Адрес",
     "set.barbers": "Сколько клиентов можно принять одновременно (мастеров)", "set.hours": "Часы работы", "set.extra": "Что ещё должен знать ассистент", "set.extraHint": "Парковка, оплата картой, акции — коротко, любым языком.",
     "set.saved": "Сохранено.",
@@ -41,8 +41,8 @@ const T = {
     "ig.hint": "Нужен профессиональный аккаунт Instagram (Бизнес или Автор), привязанный к странице Facebook.", "ig.ok": "Instagram подключён. Ассистент уже отвечает в Direct.", "ig.failed": "Не удалось подключить Instagram. Попробуйте ещё раз.",
     "ig.cancelled": "Подключение отменено.", "ig.nopage": "Не нашли Instagram, привязанный к странице Facebook. Привяжите его в настройках Instagram и попробуйте снова.", "ig.offAsk": "Отключить Instagram? Ассистент перестанет отвечать в Direct.",
     save: "Сохранить",
-    "test.title": "Проверьте своего ассистента", "test.sub": "Он уже знает ваши услуги, цены и часы. Позвоните или напишите — запись появится в вашем календаре.",
-    "test.call": "Позвонить и написать", "test.copy": "Скопировать ссылку", "test.copied": "Ссылка скопирована", "test.note": "Подключение вашего телефонного номера — следующий шаг. Пока проверяйте по этой ссылке.",
+    "test.title": "Проверьте своего ассистента", "test.sub": "Он уже знает ваши услуги, цены и часы. Напишите ему как клиент — запись появится в вашем календаре.",
+    "test.call": "Открыть чат", "test.copy": "Скопировать ссылку", "test.copied": "Ссылка скопирована", "test.note": "Так же он отвечает вашим клиентам в Instagram Direct, когда Instagram подключён в настройках.",
     days: ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], daysLong: ["Воскресенье", "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"],
     months: ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"],
   },
@@ -66,18 +66,18 @@ const T = {
     "st.today": "Այսօր", "st.7": "7 օր", "st.30": "30 օր", "st.month": "Այս ամիս", "st.90": "3 ամիս", "st.next": "Առաջիկա",
     "k.revenue": "Վաստակ", "k.revenueHint": "անցած այցերից", "k.expected": "դեռ սպասվում է", "k.bookings": "Գրանցումներ", "k.cancelled": "չեղարկված",
     "k.clients": "Հաճախորդներ", "k.new": "նոր", "k.returning": "Կրկին եկել են", "k.returningHint": "2 և ավելի այց", "k.avg": "Միջին չեկ",
-    "k.after": "Գրանցումներ ոչ աշխատանքային ժամին", "k.afterHint": "դրանք ընդունել է օգնականը, երբ փակ էիք", "k.conv": "Օգնականի զրույցներ", "k.convHint": "զանգ · չատ · րոպե",
+    "k.after": "Գրանցումներ ոչ աշխատանքային ժամին", "k.afterHint": "դրանք ընդունել է օգնականը, երբ փակ էիք", "k.conv": "Օգնականի զրույցներ", "k.convHint": "կայքի չատում և Instagram-ում",
     "ch.day": "Գրանցումներ ըստ օրերի", "ch.dayHint": "սյան վրա պահեք՝ թիվը տեսնելու համար", "ch.hour": "Ամենաակտիվ ժամերը", "ch.weekday": "Ամենաակտիվ օրերը",
-    "ch.services": "Հայտնի ծառայություններ", "ch.channels": "Որտեղից են գրանցումները", "ch.call": "Զանգ", "ch.chat": "Չատ", "ch.manual": "Ձեռքով",
+    "ch.services": "Հայտնի ծառայություններ", "ch.channels": "Որտեղից են գրանցումները", "ch.call": "Զանգ", "ch.chat": "Կայքի չատ", "ch.instagram": "Instagram", "ch.manual": "Ձեռքով",
     "ch.clients": "Մշտական հաճախորդներ", "ch.barbers": "Ըստ բարբերների", "ch.noBarber": "Առանց բարբերի", "ch.client": "Հաճախորդ", "ch.visits": "Այց", "ch.spent": "Գումար",
     "st.peak": "Գագաթ՝", "st.empty": "Այս ժամանակահատվածում գրանցումներ չկան։", "st.note": "Գումարները՝ Ձեր գնացուցակի ընթացիկ գներով։", "bookingsWord": "գրանց.",
     "cal.add": "Գրանցում", "cal.block": "Փակել ժամերը", "cal.closedDay": "Հանգստյան օր", "cal.empty": "Գրանցումներ դեռ չկան", "cal.emptyHint": "Օգնականի գրանցումներն ինքնաբերաբար կհայտնվեն այստեղ։",
     "cal.closed": "Փակ է", "cal.manual": "ձեռքով", "cal.cancelled": "չեղարկված", "cal.cancelAsk": "Չեղարկե՞լ գրանցումը", "cal.unblockAsk": "Կրկին բացե՞լ այս ժամերը",
     "cal.today": "Այսօր", "cal.tomorrow": "Վաղը",
     "dlg.booking": "Նոր գրանցում", "dlg.block": "Փակել ժամերը", "dlg.service": "Ծառայություն", "dlg.time": "Ժամ", "dlg.client": "Հաճախորդի անունը", "dlg.phone": "Հեռախոս", "dlg.from": "Սկսած", "dlg.to": "Մինչև", "dlg.note": "Մեկնաբանություն", "dlg.allDay": "Ամբողջ օրը",
-    "srv.title": "Ծառայություններ և գներ", "srv.sub": "Օգնականն ասում է միայն այս ծառայություններն ու գները։ Հայերեն անվանումն է նա արտասանում հաճախորդին։", "srv.add": "Ծառայություն",
+    "srv.title": "Ծառայություններ և գներ", "srv.sub": "Օգնականն ասում է միայն այս ծառայություններն ու գները։ Հաճախորդին նա գրում է հայերեն անվանումը։", "srv.add": "Ծառայություն",
     "srv.hy": "Անվանումը հայերեն", "srv.ru": "Անվանումը ռուսերեն", "srv.dur": "Րոպե", "srv.price": "Գին, ֏", "srv.max": "Մինչև, ֏", "srv.on": "Ակտիվ", "srv.del": "Ջնջել", "srv.saved": "Պահպանված է։ Օգնականն արդեն գիտի նոր գները։",
-    "set.enabled": "Օգնականը պատասխանում է հաճախորդներին", "set.enabledHint": "Անջատեք, և նա քաղաքավարի կխնդրի զանգել ավելի ուշ։",
+    "set.enabled": "Օգնականը պատասխանում է հաճախորդներին", "set.enabledHint": "Անջատեք, և նա քաղաքավարի կխնդրի գրել ավելի ուշ։",
     "set.business": "Բիզնես", "set.name": "Անվանում", "set.spoken": "Ինչպես է օգնականն արտասանում անվանումը (հայերեն տառերով)", "set.address": "Հասցե",
     "set.barbers": "Քանի հաճախորդ կարելի է ընդունել միաժամանակ (վարպետներ)", "set.hours": "Աշխատանքային ժամեր", "set.extra": "Ինչ ևս պետք է իմանա օգնականը", "set.extraHint": "Կայանատեղի, քարտով վճարում, ակցիաներ՝ կարճ, ցանկացած լեզվով։",
     "set.saved": "Պահպանված է։",
@@ -87,8 +87,8 @@ const T = {
     "ig.hint": "Անհրաժեշտ է Instagram-ի մասնագիտական հաշիվ (Բիզնես կամ Հեղինակ)՝ կապված Facebook էջին։", "ig.ok": "Instagram-ը միացված է։ Օգնականն արդեն պատասխանում է Direct-ում։", "ig.failed": "Չհաջողվեց միացնել Instagram-ը։ Փորձեք կրկին։",
     "ig.cancelled": "Միացումը չեղարկվեց։", "ig.nopage": "Facebook էջին կապված Instagram չգտանք։ Կապեք այն Instagram-ի կարգավորումներում և փորձեք կրկին։", "ig.offAsk": "Անջատե՞լ Instagram-ը։ Օգնականը կդադարի պատասխանել Direct-ում։",
     save: "Պահպանել",
-    "test.title": "Ստուգեք Ձեր օգնականին", "test.sub": "Նա արդեն գիտի Ձեր ծառայությունները, գներն ու ժամերը։ Զանգեք կամ գրեք, և գրանցումը կհայտնվի Ձեր օրացույցում։",
-    "test.call": "Զանգել և գրել", "test.copy": "Պատճենել հղումը", "test.copied": "Հղումը պատճենված է", "test.note": "Ձեր հեռախոսահամարի միացումը հաջորդ քայլն է։ Առայժմ ստուգեք այս հղումով։",
+    "test.title": "Ստուգեք Ձեր օգնականին", "test.sub": "Նա արդեն գիտի Ձեր ծառայությունները, գներն ու ժամերը։ Գրեք նրան որպես հաճախորդ, և գրանցումը կհայտնվի Ձեր օրացույցում։",
+    "test.call": "Բացել չատը", "test.copy": "Պատճենել հղումը", "test.copied": "Հղումը պատճենված է", "test.note": "Նույն կերպ նա պատասխանում է Ձեր հաճախորդներին Instagram Direct-ում, երբ Instagram-ը միացված է կարգավորումներում։",
     days: ["Կիր", "Երկ", "Երք", "Չրք", "Հնգ", "Ուրբ", "Շբթ"], daysLong: ["Կիրակի", "Երկուշաբթի", "Երեքշաբթի", "Չորեքշաբթի", "Հինգշաբթի", "Ուրբաթ", "Շաբաթ"],
     months: ["հունվարի", "փետրվարի", "մարտի", "ապրիլի", "մայիսի", "հունիսի", "հուլիսի", "օգոստոսի", "սեպտեմբերի", "հոկտեմբերի", "նոյեմբերի", "դեկտեմբերի"],
   },
@@ -248,7 +248,7 @@ function render() {
   renderServices();
   renderSettings();
   const link = `${location.origin}/try/?biz=${me.slug}`;
-  $("tryCall").href = link;
+  $("tryChat").href = link;
 }
 
 document.querySelectorAll(".cab-tabs button").forEach((b) => b.addEventListener("click", () => {
@@ -533,7 +533,7 @@ $("setForm").addEventListener("submit", async (e) => {
 });
 
 $("copyLink").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("tryCall").href); toast(t("test.copied")); } catch { prompt("", $("tryCall").href); }
+  try { await navigator.clipboard.writeText($("tryChat").href); toast(t("test.copied")); } catch { prompt("", $("tryChat").href); }
 });
 
 document.querySelectorAll("#langs button").forEach((b) => b.addEventListener("click", () => { lang = b.dataset.lang; store.set("bvLang", lang); applyLang(); }));
@@ -613,7 +613,8 @@ function renderStats() {
   const peakDay = order[wd.indexOf(Math.max(...wd))], peakHour = hFrom + hourVals.indexOf(Math.max(...hourVals));
   const days = d.by_day.length > 62 ? null : d.by_day;
   const sMax = Math.max(...d.services.map((x) => x.count), 1);
-  const chTotal = d.channels.call + d.channels.chat + d.channels.manual || 1;
+  const chTotal = Object.values(d.channels).reduce((a, b) => a + b, 0) || 1;
+  const chRows = Object.entries(d.channels).filter(([k, v]) => k !== "call" || v); // old phone bookings, if any
   const short = (date) => `${Number(date.slice(8))}.${date.slice(5, 7)}`;
   box.innerHTML = `
     <div class="kpis">
@@ -623,7 +624,7 @@ function renderStats() {
       <div class="kpi"><small>${esc(t("k.returning"))}</small><b>${d.returning_clients}</b><span>${esc(t("k.returningHint"))}</span></div>
       <div class="kpi"><small>${esc(t("k.avg"))}</small><b>${money(d.avg_check)}</b></div>
       <div class="kpi"><small>${esc(t("k.after"))}</small><b>${d.after_hours}</b><span>${esc(t("k.afterHint"))}</span></div>
-      ${d.barber_id ? "" : `<div class="kpi"><small>${esc(t("k.conv"))}</small><b>${d.conversations.calls + d.conversations.chats}</b><span>${d.conversations.calls} · ${d.conversations.chats} · ${d.conversations.call_minutes} ${esc(t("k.convHint").split(" · ").pop())}</span></div>`}
+      ${d.barber_id ? "" : `<div class="kpi"><small>${esc(t("k.conv"))}</small><b>${d.conversations.chats}</b><span>${esc(t("k.convHint"))}</span></div>`}
     </div>
     ${d.bookings ? `<div class="insight">📈 ${esc(t("st.peak"))} ${esc(t("daysLong")[peakDay])}, ${String(peakHour).padStart(2, "0")}:00–${String(peakHour + 1).padStart(2, "0")}:00</div>` : ""}
     ${days ? `<div class="chart-card"><h3>${esc(t("ch.day"))}</h3><p>${esc(t("ch.dayHint"))}</p>${bars(days.map((x) => x.bookings), days.map((x, i) => (days.length <= 10 ? short(x.date) : i % Math.ceil(days.length / 8) === 0 ? String(Number(x.date.slice(8))) : "")), (i, v) => `${short(days[i].date)}: ${v} ${t("bookingsWord")} · ${money(days[i].revenue)}`)}</div>` : ""}
@@ -634,7 +635,7 @@ function renderStats() {
     ${d.by_barber?.length ? `<div class="chart-card"><h3>${esc(t("ch.barbers"))}</h3><p>&nbsp;</p>${(() => { const mx = Math.max(...d.by_barber.map((x) => x.bookings), 1); return d.by_barber.map((x) => `<div class="hbar"><span class="nm">${esc(x.name || t("ch.noBarber"))}</span><span class="val">${x.bookings} · ${money(x.revenue)}</span><span class="track"><i style="width:${(x.bookings / mx) * 100}%"></i></span></div>`).join(""); })()}</div>` : ""}
     <div class="stats-grid">
       <div class="chart-card"><h3>${esc(t("ch.services"))}</h3><p>&nbsp;</p>${d.services.slice(0, 8).map((x) => `<div class="hbar"><span class="nm">${esc(x.name)}</span><span class="val">${x.count} · ${money(x.revenue)}</span><span class="track"><i style="width:${(x.count / sMax) * 100}%"></i></span></div>`).join("")}</div>
-      <div class="chart-card"><h3>${esc(t("ch.channels"))}</h3><p>&nbsp;</p>${[["call", d.channels.call], ["chat", d.channels.chat], ["manual", d.channels.manual]].map(([k, v]) => `<div class="hbar"><span class="nm">${esc(t("ch." + k))}</span><span class="val">${v} · ${Math.round((v / chTotal) * 100)}%</span><span class="track"><i style="width:${(v / chTotal) * 100}%"></i></span></div>`).join("")}</div>
+      <div class="chart-card"><h3>${esc(t("ch.channels"))}</h3><p>&nbsp;</p>${chRows.map(([k, v]) => `<div class="hbar"><span class="nm">${esc(t("ch." + k))}</span><span class="val">${v} · ${Math.round((v / chTotal) * 100)}%</span><span class="track"><i style="width:${(v / chTotal) * 100}%"></i></span></div>`).join("")}</div>
     </div>
     <div class="chart-card"><h3>${esc(t("ch.clients"))}</h3><p>&nbsp;</p>
       <table class="clients-table"><thead><tr><th>${esc(t("ch.client"))}</th><th>${esc(t("ch.visits"))}</th><th>${esc(t("ch.spent"))}</th></tr></thead>

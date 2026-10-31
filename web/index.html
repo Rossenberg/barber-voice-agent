@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>UMNIK — ИИ-администратор, который отвечает каждому клиенту</title>
-  <meta name="description" content="UMNIK принимает звонки и сообщения на армянском и русском, называет цены и сам записывает клиентов в ваш календарь — 24/7. Для барбершопов, клиник, колл-центров, офисов и фастфуда.">
+  <meta name="description" content="UMNIK отвечает клиентам в Instagram Direct и в чате на сайте на армянском и русском, называет цены и сам записывает в ваш календарь — 24/7. Для барбершопов, салонов, клиник, офисов и доставки.">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%23059669'/%3E%3Cpath d='M9 19v-6m4.7 9V10m4.6 12V10M23 19v-6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,18 +44,18 @@
         <div class="hero-copy">
           <span class="eyebrow"><span class="live-dot"></span><span data-i18n="hero.eyebrow">ИИ-администратор для бизнеса</span></span>
           <h1 data-i18n-html="hero.title">Ваши руки заняты. <em>UMNIK</em> отвечает каждому клиенту.</h1>
-          <p class="lead" data-i18n="hero.sub">Принимает звонки и сообщения на армянском и русском, называет цены и сам записывает в ваш календарь — днём, ночью и в выходные.</p>
+          <p class="lead" data-i18n="hero.sub">Отвечает в Instagram Direct и в чате на сайте на армянском и русском, называет цены и сам записывает в ваш календарь — днём, ночью и в выходные.</p>
           <div class="hero-actions">
             <button class="btn btn-primary btn-lg" data-start>
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
-              <span data-i18n="cta.callDemo">Позвонить ассистенту</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg>
+              <span data-i18n="cta.chatDemo">Написать ассистенту</span>
             </button>
             <button class="btn btn-ghost btn-lg" data-lead data-i18n="cta.connectBiz">Подключить бизнес</button>
           </div>
           <ul class="hero-facts">
             <li><b>24/7</b><span data-i18n="fact.always">без выходных и перерывов</span></li>
             <li><b data-i18n="fact.langsN">2 языка</b><span data-i18n="fact.langs">армянский и русский</span></li>
-            <li><b>∞</b><span data-i18n="fact.parallel">звонков одновременно</span></li>
+            <li><b>∞</b><span data-i18n="fact.parallel">диалогов одновременно</span></li>
           </ul>
         </div>
 
@@ -65,8 +65,7 @@
           <div class="phone-card">
             <div class="pc-head">
               <span class="pc-av">U</span>
-              <span class="pc-who"><b>UMNIK</b><small data-i18n="scene.status">отвечает на звонок</small></span>
-              <span class="pc-wave"><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="pc-who"><b>UMNIK</b><small data-i18n="scene.status">отвечает в Direct</small></span>
             </div>
             <div class="pc-body" id="sceneBody"></div>
           </div>
@@ -88,11 +87,11 @@
     <section class="loss" id="loss">
       <div class="wrap loss-grid">
         <div class="reveal">
-          <span class="kicker" data-i18n="loss.kicker">Цена пропущенного звонка</span>
-          <h2 class="h2" data-i18n="loss.title">Каждый неотвеченный звонок — это клиент, который ушёл к конкуренту</h2>
-          <p class="sub" data-i18n="loss.sub">Клиент, который не дозвонился, редко перезванивает: он просто набирает следующий номер. Посчитайте, сколько это стоит вам.</p>
+          <span class="kicker" data-i18n="loss.kicker">Цена сообщения без ответа</span>
+          <h2 class="h2" data-i18n="loss.title">Каждое сообщение без ответа — это клиент, который ушёл к конкуренту</h2>
+          <p class="sub" data-i18n="loss.sub">Клиент, которому не ответили за пару минут, редко ждёт: он просто пишет следующему. Посчитайте, сколько это стоит вам.</p>
           <div class="pains">
-            <div class="pain"><span class="pain-n">01</span><span data-i18n="pain.1">Вы с клиентом — телефон звонит и звонит</span></div>
+            <div class="pain"><span class="pain-n">01</span><span data-i18n="pain.1">Вы с клиентом, а в Direct копятся сообщения</span></div>
             <div class="pain"><span class="pain-n">02</span><span data-i18n="pain.2">Вечером, ночью и в выходные никто не отвечает</span></div>
             <div class="pain"><span class="pain-n">03</span><span data-i18n="pain.3">Администратор болеет, в отпуске или занят другим</span></div>
           </div>
@@ -100,7 +99,7 @@
         <div class="calc reveal" id="calc">
           <h3 data-i18n="calc.title">Сколько вы теряете</h3>
           <label class="range">
-            <span><span data-i18n="calc.missed">Пропущенных звонков в день</span><b id="vMissed">5</b></span>
+            <span><span data-i18n="calc.missed">Сообщений без ответа в день</span><b id="vMissed">5</b></span>
             <input type="range" id="rMissed" min="1" max="40" value="5">
           </label>
           <label class="range">
@@ -126,7 +125,7 @@
       <div class="wrap">
         <div class="head reveal">
           <span class="kicker" data-i18n="ind.kicker">Для кого</span>
-          <h2 class="h2" data-i18n="ind.title">Один UMNIK — любой бизнес, где звонят клиенты</h2>
+          <h2 class="h2" data-i18n="ind.title">Один UMNIK — любой бизнес, где пишут клиенты</h2>
           <p class="sub" data-i18n="ind.sub">Вы выбираете сферу, добавляете свои услуги и цены — и ассистент говорит именно о вашем бизнесе.</p>
         </div>
         <div class="industries">
@@ -160,20 +159,6 @@
           <article class="ind reveal">
             <div class="scene-ico" aria-hidden="true">
               <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
-                <path d="M18 36v-4a14 14 0 0 1 28 0v4" class="si-line"/>
-                <rect x="14" y="34" width="8" height="12" rx="4" class="si-solid"/><rect x="42" y="34" width="8" height="12" rx="4" class="si-solid"/>
-                <path d="M46 46c0 4-4 6-10 6" class="si-line"/>
-                <path class="wave1" d="M54 26a8 8 0 0 1 0 12"/><path class="wave2" d="M58 22a14 14 0 0 1 0 20"/>
-              </svg>
-            </div>
-            <span class="badge" data-i18n="ind.soon">Скоро</span>
-            <h3 data-i18n="ind.call.t">Колл-центры</h3>
-            <p data-i18n="ind.call.d">Первая линия: отвечает на типовые вопросы и передаёт сложные оператору.</p>
-            <q data-i18n="ind.call.q">«Где мой заказ? Когда доставка?»</q>
-          </article>
-          <article class="ind reveal">
-            <div class="scene-ico" aria-hidden="true">
-              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
                 <rect x="16" y="18" width="32" height="30" rx="6" class="si-card"/>
                 <path d="M16 27h32M24 14v8M40 14v8" class="si-line"/>
                 <rect class="cal-cell c1" x="21" y="32" width="7" height="6" rx="2"/><rect class="cal-cell c2" x="30.5" y="32" width="7" height="6" rx="2"/><rect class="cal-cell c3" x="40" y="32" width="4" height="6" rx="2"/>
@@ -196,7 +181,7 @@
             </div>
             <span class="badge" data-i18n="ind.soon">Скоро</span>
             <h3 data-i18n="ind.food.t">Фастфуд и доставка</h3>
-            <p data-i18n="ind.food.d">Принимает заказы по телефону, отвечает про меню, адреса и время работы.</p>
+            <p data-i18n="ind.food.d">Принимает заказы в переписке, отвечает про меню, адреса и время работы.</p>
             <q data-i18n="ind.food.q">«Две шаурмы и колу, на Комитаса»</q>
           </article>
           <article class="ind ind-more reveal">
@@ -207,7 +192,7 @@
               </svg>
             </div>
             <h3 data-i18n="ind.more.t">Ваш бизнес</h3>
-            <p data-i18n="ind.more.d">Фитнес, автомойки, отели, курсы. Если клиенты звонят — UMNIK поможет.</p>
+            <p data-i18n="ind.more.d">Фитнес, автомойки, отели, курсы. Если клиенты пишут — UMNIK поможет.</p>
             <button class="link-arrow" data-lead data-i18n="ind.more.cta">Обсудить подключение →</button>
           </article>
         </div>
@@ -219,10 +204,10 @@
       <div class="wrap demo-grid">
         <div class="demo-copy reveal">
           <span class="kicker" data-i18n="demo.kicker">Живое демо</span>
-          <h2 class="h2" data-i18n="demo.title">Поговорите с UMNIK прямо сейчас</h2>
-          <p class="sub" data-i18n="demo.sub">Это настоящий ассистент демо-барбершопа «Blade Barbershop». Позвоните или напишите — спросите цену, свободное время, запишитесь, перенесите запись.</p>
+          <h2 class="h2" data-i18n="demo.title">Напишите UMNIK прямо сейчас</h2>
+          <p class="sub" data-i18n="demo.sub">Это настоящий ассистент демо-барбершопа «Blade Barbershop». Напишите — спросите цену, свободное время, запишитесь, перенесите запись. Так же он отвечает в Instagram Direct.</p>
           <ul class="checks">
-            <li data-i18n="demo.c1">Понимает разговорный армянский и русский</li>
+            <li data-i18n="demo.c1">Понимает разговорный армянский (и латиницей) и русский</li>
             <li data-i18n="demo.c2">Смотрит реальный календарь и записывает</li>
             <li data-i18n="demo.c3">Отвечает за пару секунд</li>
           </ul>
@@ -242,12 +227,7 @@
             <span class="status" id="status" data-state="idle" data-i18n="status.ready">Готов</span>
           </div>
 
-          <div class="modes" role="tablist" aria-label="Mode">
-            <button role="tab" data-mode="call" aria-selected="true"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg><span data-i18n="mode.call">Позвонить</span></button>
-            <button role="tab" data-mode="chat" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="mode.chat">Написать</span></button>
-          </div>
-
-          <div class="chat" id="chatPane" hidden>
+          <div class="chat" id="chatPane">
             <div class="transcript chat-log" id="chatLog" aria-live="polite"></div>
             <div class="chips chat-chips" id="chatChips">
               <button class="chip" type="button">Ի՞նչ արժե մորուքի մշակումը</button>
@@ -258,50 +238,6 @@
               <input class="input" id="chatInput" autocomplete="off" maxlength="500" data-i18n-placeholder="chat.placeholder" placeholder="Напишите сообщение…">
               <button class="btn btn-primary chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
             </form>
-          </div>
-
-          <div class="call-pane" id="callPane">
-            <div class="voices" id="voices" role="group" aria-label="Voice">
-              <button class="voice" data-voice="female" aria-pressed="true"><span class="av">А</span><span><b data-i18n="voice.female">Ани</b><span data-i18n="voice.femaleHint">Женский голос</span></span></button>
-              <button class="voice" data-voice="male" aria-pressed="false"><span class="av">А</span><span><b data-i18n="voice.male">Арам</b><span data-i18n="voice.maleHint">Мужской голос</span></span></button>
-            </div>
-
-            <div class="stage">
-              <div class="orb" id="orb" data-mode="idle">
-                <div class="ring"></div><div class="ring r2"></div><div class="halo"></div>
-                <div class="core"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 10v4M10.5 7v10M14 9v6M17.5 11v2"/></svg></div>
-              </div>
-            </div>
-            <p class="label" id="label" aria-live="polite"></p>
-
-            <div class="call-row">
-              <button class="btn btn-primary btn-lg" id="startBtn">
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></svg>
-                <span data-i18n="call.start">Позвонить</span>
-              </button>
-              <button class="btn btn-end btn-lg" id="endBtn" hidden>
-                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1a1 1 0 0 1-.56.9 11.5 11.5 0 0 0-2.66 1.85 1 1 0 0 1-1.41-.02L.3 13.1a1 1 0 0 1 0-1.41A16.9 16.9 0 0 1 12 7c4.5 0 8.6 1.75 11.7 4.69a1 1 0 0 1 0 1.41l-2.47 2.46a1 1 0 0 1-1.41.02 11.3 11.3 0 0 0-2.66-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
-                <span data-i18n="call.end">Завершить</span>
-              </button>
-            </div>
-
-            <!-- the conversation text isn't shown on the landing (the call should feel like a phone call); /realtime/ shows it -->
-            <div class="transcript" id="transcript" hidden></div>
-
-            <div class="tries" id="tries">
-              <div class="tries-title" data-i18n="try.title">Попробуйте сказать</div>
-              <div class="chips">
-                <span class="chip">«Ախպեր ջան, էգուց 11-ին տեղ կա՞»</span>
-                <span class="chip">«Ի՞նչ արժե մորուքի մշակումը»</span>
-                <span class="chip">«Можно сегодня вечером на стрижку?»</span>
-              </div>
-            </div>
-
-            <details class="caller" id="callerBox">
-              <summary data-i18n="caller.summary">Номер звонящего (демо)</summary>
-              <input class="input" id="callerPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+374 91 23 45 67">
-              <p data-i18n="caller.hint">В настоящем звонке номер определяется автоматически: так ассистент находит ваши записи, чтобы перенести или отменить их.</p>
-            </details>
           </div>
         </div>
       </div>
@@ -317,12 +253,12 @@
         <div class="features">
           <article class="feat feat-wide reveal">
             <div class="feat-art speech" aria-hidden="true">
-              <span class="bubble b1">Ախպեր ջան, էգուց կարա՞մ գամ</span>
+              <span class="bubble b1">Barev, vaxy 11-in tex ka?</span>
               <span class="bubble b2">Можно на завтра?</span>
               <span class="bubble b3 me">Վաղը ժամը տասնմեկին ազատ է։</span>
             </div>
-            <h3 data-i18n="f1.t">Понимает живую речь</h3>
-            <p data-i18n="f1.d">Разговорный армянский, сленг, русские слова вперемешку, исправления на ходу — «нет, не завтра, послезавтра».</p>
+            <h3 data-i18n="f1.t">Понимает живой язык</h3>
+            <p data-i18n="f1.d">Разговорный армянский, армянский латиницей, сленг, русские слова вперемешку, исправления на ходу — «нет, не завтра, послезавтра».</p>
           </article>
           <article class="feat reveal">
             <div class="feat-art cal" aria-hidden="true">
@@ -342,9 +278,9 @@
             <p data-i18n="f4.d">Ассистент говорит только то, что вы записали в кабинете. Поменяли цену — он уже знает.</p>
           </article>
           <article class="feat reveal">
-            <div class="feat-art channels" aria-hidden="true"><span class="ch call"></span><span class="ch-link"></span><span class="ch brain">U</span><span class="ch-link"></span><span class="ch chat"></span></div>
-            <h3 data-i18n="f5.t">Звонки и чат — один мозг</h3>
-            <p data-i18n="f5.d">Одинаково отвечает по телефону и в переписке на сайте.</p>
+            <div class="feat-art channels" aria-hidden="true"><span class="ch ig"></span><span class="ch-link"></span><span class="ch brain">U</span><span class="ch-link"></span><span class="ch chat"></span></div>
+            <h3 data-i18n="f5.t">Instagram и сайт — один мозг</h3>
+            <p data-i18n="f5.d">Одинаково отвечает в Instagram Direct и в чате на сайте, записи попадают в один календарь.</p>
           </article>
           <article class="feat reveal">
             <div class="feat-art qa" aria-hidden="true"><span class="qa-shield"></span><span class="qa-tick"></span></div>
@@ -360,12 +296,12 @@
       <div class="wrap">
         <div class="head reveal">
           <span class="kicker" data-i18n="how.kicker">Подключение</span>
-          <h2 class="h2" data-i18n="how.title">Три шага до первого звонка</h2>
+          <h2 class="h2" data-i18n="how.title">Три шага до первой записи</h2>
         </div>
         <ol class="steps">
           <li class="step reveal"><span class="step-n">1</span><h3 data-i18n="how.1.t">Регистрируетесь</h3><p data-i18n="how.1.d">Выбираете сферу бизнеса — барбершоп, клиника, офис или другую.</p></li>
           <li class="step reveal"><span class="step-n">2</span><h3 data-i18n="how.2.t">Добавляете услуги и часы</h3><p data-i18n="how.2.d">Цены, длительность, график работы и мастеров — в личном кабинете.</p></li>
-          <li class="step reveal"><span class="step-n">3</span><h3 data-i18n="how.3.t">Подключаем ваш номер</h3><p data-i18n="how.3.d">Звонки идут на UMNIK, записи появляются в вашем календаре.</p></li>
+          <li class="step reveal"><span class="step-n">3</span><h3 data-i18n="how.3.t">Подключаете Instagram</h3><p data-i18n="how.3.d">Одной кнопкой в кабинете. UMNIK отвечает в Direct, записи появляются в вашем календаре.</p></li>
         </ol>
       </div>
     </section>
@@ -410,12 +346,12 @@
           <h2 class="h2" data-i18n="faq.title">Частые вопросы</h2>
         </div>
         <div class="faq reveal">
-          <details><summary data-i18n="faq.1.q">Клиенты поймут, что говорят с роботом?</summary><p data-i18n="faq.1.a">Голос естественный, ответы короткие, как у живого администратора. Если клиент прямо спросит — UMNIK честно скажет, что он ИИ-помощник, и продолжит запись.</p></details>
+          <details><summary data-i18n="faq.1.q">Клиенты поймут, что им пишет робот?</summary><p data-i18n="faq.1.a">Ответы короткие и живые, как у хорошего администратора. Если клиент прямо спросит — UMNIK честно скажет, что он ИИ-помощник, и продолжит запись.</p></details>
           <details><summary data-i18n="faq.2.q">Что, если вопрос сложный?</summary><p data-i18n="faq.2.a">UMNIK не придумывает ответы. Если информации нет, он вежливо предложит связаться с администратором и передаст вам вопрос.</p></details>
-          <details><summary data-i18n="faq.3.q">Как подключить мой номер?</summary><p data-i18n="faq.3.a">Через переадресацию с вашего номера у Ucom, Viva или Team. Номер для клиентов не меняется.</p></details>
-          <details><summary data-i18n="faq.4.q">Каждый бизнес получает своего ассистента?</summary><p data-i18n="faq.4.a">Да. У каждого бизнеса свои услуги, цены, часы и календарь. На ваш номер UMNIK отвечает только о вашем бизнесе.</p></details>
-          <details><summary data-i18n="faq.5.q">Сколько стоит?</summary><p data-i18n="faq.5.a">Зависит от количества звонков. Оставьте заявку — подберём тариф и дадим попробовать на ваших клиентах.</p></details>
-          <details><summary data-i18n="faq.6.q">На каких языках говорит?</summary><p data-i18n="faq.6.a">На армянском и русском, понимает разговорную речь и сленг. Английский тоже понимает.</p></details>
+          <details><summary data-i18n="faq.3.q">Как подключить мой Instagram?</summary><p data-i18n="faq.3.a">В кабинете кнопкой «Подключить Instagram»: входите через Facebook, и UMNIK начинает отвечать в Direct. Нужен профессиональный аккаунт, привязанный к странице Facebook.</p></details>
+          <details><summary data-i18n="faq.4.q">Каждый бизнес получает своего ассистента?</summary><p data-i18n="faq.4.a">Да. У каждого бизнеса свои услуги, цены, часы и календарь. В вашем Instagram UMNIK отвечает только о вашем бизнесе.</p></details>
+          <details><summary data-i18n="faq.5.q">Сколько стоит?</summary><p data-i18n="faq.5.a">Зависит от количества сообщений. Оставьте заявку — подберём тариф и дадим попробовать на ваших клиентах.</p></details>
+          <details><summary data-i18n="faq.6.q">На каких языках пишет?</summary><p data-i18n="faq.6.a">На армянском и русском, понимает разговорный язык, сленг и армянский латиницей. Английский тоже понимает.</p></details>
         </div>
       </div>
     </section>
@@ -425,11 +361,11 @@
       <div class="wrap">
         <div class="final-card reveal">
           <div class="rings final-rings" aria-hidden="true"><i></i><i></i><i></i></div>
-          <h2 data-i18n="final.title">Пусть ни один клиент больше не услышит длинные гудки</h2>
-          <p data-i18n="final.sub">Подключим UMNIK к вашему бизнесу и номеру. Первые звонки — на тест.</p>
+          <h2 data-i18n="final.title">Пусть ни одно сообщение клиента не останется без ответа</h2>
+          <p data-i18n="final.sub">Подключим UMNIK к вашему Instagram и сайту. Первые недели — на тест.</p>
           <div class="final-actions">
             <button class="btn btn-white btn-lg" data-lead data-i18n="cta.connectBiz">Подключить бизнес</button>
-            <button class="btn btn-outline-white btn-lg" data-start data-i18n="cta.callDemo">Позвонить ассистенту</button>
+            <button class="btn btn-outline-white btn-lg" data-start data-i18n="cta.chatDemo">Написать ассистенту</button>
           </div>
         </div>
       </div>
@@ -449,13 +385,8 @@
     </div>
   </footer>
 
-  <div class="call-bar" id="callBar" role="region" aria-label="Call" hidden>
-    <span class="cb-dot" aria-hidden="true"></span>
-    <span class="cb-text"><b data-i18n="call.live">Идёт звонок</b> <span id="callBarTime"></span></span>
-    <button class="btn btn-end btn-sm" id="callBarEnd" data-i18n="call.end">Завершить</button>
-  </div>
 
-  <div class="fab" id="fab"><button class="btn btn-primary btn-lg" data-start><span data-i18n="cta.callDemo">Позвонить ассистенту</span></button></div>
+  <div class="fab" id="fab"><button class="btn btn-primary btn-lg" data-start><span data-i18n="cta.chatDemo">Написать ассистенту</span></button></div>
 
   <!-- lead form -->
   <dialog class="lead-dialog" id="leadDialog" aria-labelledby="leadTitle">
@@ -469,8 +400,7 @@
         <select class="input" name="industry">
           <option value="barber" data-i18n="ind.barber.t">Барбершопы и салоны</option>
           <option value="dental" data-i18n="ind.dental.t">Стоматологии и клиники</option>
-          <option value="callcenter" data-i18n="ind.call.t">Колл-центры</option>
-          <option value="office" data-i18n="ind.office.t">Офисы и сервисы</option>
+                    <option value="office" data-i18n="ind.office.t">Офисы и сервисы</option>
           <option value="food" data-i18n="ind.food.t">Фастфуд и доставка</option>
           <option value="other" data-i18n="lead.other">Другое</option>
         </select>
@@ -481,12 +411,6 @@
     </form>
   </dialog>
 
-  <script src="/config.js"></script>
-  <!-- Silero VAD (speech start/end detection in the browser) -->
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/bundle.min.js"></script>
-  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort-wasm-simd-threaded.wasm" crossorigin>
-  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.31/dist/silero_vad_v5.onnx" crossorigin>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

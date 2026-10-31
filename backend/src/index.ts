@@ -35,7 +35,11 @@ interface Env {
   RESEND_API_KEY?: string; // cabinet emails: confirm the address, reset the password
   INSTAGRAM_APP_SECRET?: string; // signs Instagram webhooks (Meta app → App settings → Basic)
   INSTAGRAM_VERIFY_TOKEN?: string; // the code we give Meta when it checks the webhook address
+  VOICE_ENABLED?: string; // "1" turns the voice endpoints on; the voice assistant is off the live site for now (voice-lab/)
 }
+
+// Voice-only endpoints: 404 unless VOICE_ENABLED=1 (scripts/voice-lab.sh sets it locally).
+const VOICE_PATHS = new Set(["/api/stt", "/api/realtime-session", "/api/rt-tool", "/api/rt-log", "/api/tts", "/api/stt-compare"]);
 
 interface Settings {
   enabled: boolean;
@@ -295,7 +299,7 @@ function resolveServices(services: Service[], raw: unknown): Service | undefined
 
 // ---------------------------------------------------------------- assistant tools
 
-const DISABLED = { success: false, error: "assistant_disabled", message: "The barbershop has switched the assistant off. Apologize and ask the client to call back later." };
+const DISABLED = { success: false, error: "assistant_disabled", message: "The barbershop has switched the assistant off. Apologize and ask the client to get in touch again later." };
 
 // What the model should do with a calendar answer. Rules in the prompt alone were skipped now and then
 // (it offered «Գրանցե՞մ» before the caller had said which service), a field in the tool result is not.
@@ -1149,14 +1153,14 @@ async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown
     s.count++; s.revenue += priceOf(b.service_id);
     svc.set(b.service_id, s);
   }
-  // booked by the assistant while the shop was closed (evening, night, a day off) — calls nobody would have taken
+  // booked by the assistant while the shop was closed (evening, night, a day off) — messages nobody would have answered
   const yerevan = (utc: string) => new Date(Date.parse(utc.replace(" ", "T") + "Z") + 4 * 3600_000);
   const afterHours = ok.filter((b) => {
     if (b.source === "manual") return false;
     const t = yerevan(b.created_at), h = settings.hours[t.getUTCDay()], m = t.getUTCHours() * 60 + t.getUTCMinutes();
     return !h || m < h[0] || m >= h[1];
   }).length;
-  const channel = (b: B) => b.source === "manual" ? "manual" : b.conversation_id?.startsWith("chat-") ? "chat" : "call";
+  const channel = (b: B) => b.source === "manual" ? "manual" : b.conversation_id?.startsWith("chat-ig-") ? "instagram" : b.conversation_id?.startsWith("chat-") ? "chat" : "call";
   const calls = convs.filter((c) => !c.call_id.startsWith("chat-"));
 
   return {
@@ -1176,7 +1180,7 @@ async function analytics(env: Env, biz: number, fromRaw: unknown, toRaw: unknown
     by_day: byDay,
     services: [...svc.values()].sort((a, b) => b.count - a.count),
     top_clients: [...clients.values()].sort((a, b) => b.visits - a.visits || b.spent - a.spent).slice(0, 10),
-    channels: { call: ok.filter((b) => channel(b) === "call").length, chat: ok.filter((b) => channel(b) === "chat").length, manual: ok.filter((b) => channel(b) === "manual").length },
+    channels: Object.fromEntries((["chat", "instagram", "manual", "call"] as const).map((k) => [k, ok.filter((b) => channel(b) === k).length])),
     after_hours: afterHours,
     conversations: { calls: calls.length, chats: convs.length - calls.length, call_minutes: Math.round(calls.reduce((t, c) => t + (c.seconds ?? 0), 0) / 60) },
     barber_id: barberId || null,
@@ -1568,6 +1572,7 @@ export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const path = new URL(req.url).pathname;
     if (path.startsWith("/api/")) ctx.waitUntil(reviewFinishedConversations(env).catch((err) => console.error("reviews", err)));
+    if ((VOICE_PATHS.has(path) || path.startsWith("/tools/")) && env.VOICE_ENABLED !== "1") return json({ error: "not_found" }, 404);
     try {
       // Public: what the landing page needs to start a conversation and show prices.
       if (path === "/api/public/config" && req.method === "GET") {
