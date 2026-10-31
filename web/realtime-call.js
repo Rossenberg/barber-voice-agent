@@ -392,33 +392,49 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
   }
 
   try {
-    // Our own ears first: Silero ends the caller's phrases (and records each one for the log).
-    // ?turn=server keeps OpenAI's VAD, for comparison.
-    if (params.get("turn") !== "server") {
-      recorder = await createListener({
-        onStart: phraseStarted,
-        onPhrase: (wav) => {
-          phrasePaused();
-          log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) });
-        },
-        isPaused: () => playing || !micOn,
-        redemptionMs: 500, // then phrasePaused() waits a bit more
-        minSpeechMs: 120, // a quick «հա» is ~0.2 s
-      }).catch((err) => (console.error("listener", err), null));
-      manual = !!recorder;
-    }
+    callId = crypto.randomUUID();
+    // The greeting plays right away (about 1 s after the tap) while everything else loads in parallel under it:
+    // done one after another (VAD model, session key, mic, settings, WebRTC) the caller waited 8-10 s in silence.
+    const cfgReady = fetch(`/api/public/config${biz ? `?biz=${encodeURIComponent(biz)}` : ""}`, { cache: "no-store" }).then((r) => r.json());
+    let greeting = "";
+    const greeted = cfgReady.then((cfg) => {
+      if (!cfg.enabled) throw new Error("disabled");
+      greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
+      if (speech === "elevenlabs") speak(greeting, ui.add(greeting, "agent"));
+    });
+    // Our own ears: Silero ends the caller's phrases (and records each one for the log). ?turn=server keeps OpenAI's VAD.
+    const listenerReady = params.get("turn") !== "server"
+      ? createListener({
+          onStart: phraseStarted,
+          onPhrase: (wav) => {
+            phrasePaused();
+            log("user_audio", { audio: new File([wav], "phrase.wav", { type: "audio/wav" }) });
+          },
+          isPaused: () => playing || !micOn,
+          redemptionMs: 500, // then phrasePaused() waits a bit more
+          minSpeechMs: 120, // a quick «հա» is ~0.2 s
+        }).catch((err) => (console.error("listener", err), null))
+      : Promise.resolve(null);
+    const micReady = navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    // the session needs to know the turn mode: Silero unless ?turn=server (if it fails to load, server VAD is set below)
+    const wantManual = params.get("turn") !== "server";
     const extra = ["stt", "effort", "nr"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
-    const sess = await (await fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${biz ? `&biz=${encodeURIComponent(biz)}` : ""}&turn=${manual ? "manual" : "server"}${extra}`, { method: "POST" })).json();
+    const sessReady = fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${biz ? `&biz=${encodeURIComponent(biz)}` : ""}&turn=${wantManual ? "manual" : "server"}${extra}`, { method: "POST" }).then((r) => r.json());
+
+    const [sess, mic, rec] = await Promise.all([sessReady, micReady, listenerReady, greeted]);
+    recorder = rec;
+    manual = !!recorder;
     callToken = sess.call_token ?? "";
     if (!sess.key) throw new Error(sess.error || "no key");
+    stream = mic;
+    micTrack = stream.getTracks()[0];
+    if (playing) { micTrack.enabled = false; micOn = false; } // the greeting is still playing
     pc = new RTCPeerConnection();
     if (speech === "openai") {
       const audio = new Audio();
       audio.autoplay = true;
       pc.ontrack = (e) => (audio.srcObject = e.streams[0]);
     }
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-    micTrack = stream.getTracks()[0];
     pc.addTrack(micTrack);
     pc.onconnectionstatechange = () => {
       const st = pc?.connectionState;
@@ -430,14 +446,12 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     dc = pc.createDataChannel("oai-events");
     dc.onclose = () => log("event", { text: "data channel closed" });
     dc.onmessage = onEvent;
-    // Fixed greeting from the dashboard instead of letting the model improvise the shop's name.
-    const cfg = await (await fetch(`/api/public/config${biz ? `?biz=${encodeURIComponent(biz)}` : ""}`, { cache: "no-store" })).json();
-    if (!cfg.enabled) throw new Error("disabled");
-    const greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
+    // Fixed greeting from the dashboard instead of letting the model improvise the shop's name: it was already
+    // spoken, the model only needs it in the conversation.
     dc.onopen = () => {
+      if (!manual) send({ type: "session.update", session: { type: "realtime", audio: { input: { turn_detection: { type: "semantic_vad", eagerness: "high", create_response: false } } } } });
       if (speech === "elevenlabs") {
         dc.send(JSON.stringify({ type: "conversation.item.create", item: { type: "message", role: "assistant", content: [{ type: "output_text", text: greeting }] } }));
-        speak(greeting, ui.add(greeting, "agent"));
       } else {
         dc.send(JSON.stringify({ type: "response.create", response: { instructions: `Say exactly this greeting, nothing else: «${greeting}»` } }));
       }
@@ -447,7 +461,6 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     const res = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${sess.key}`, "content-type": "application/sdp" } });
     if (!res.ok) throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 200)}`);
     await pc.setRemoteDescription({ type: "answer", sdp: await res.text() });
-    callId = crypto.randomUUID();
     callStartedAt = Date.now();
     log("event", { text: `turns: ${manual ? "silero" : "openai vad"}` });
     ui.state("connected");
