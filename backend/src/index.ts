@@ -949,7 +949,8 @@ async function chatTurn(env: Env, biz: number, chatId: string, history: { role: 
       }
       continue;
     }
-    const reply = (msg.content ?? "").replace(/[‹›]/g, "").trim(); // phrasebook slot marks
+    let reply = (msg.content ?? "").replace(/[‹›]/g, "").trim(); // phrasebook slot marks
+    if (/^[-–—.]*$/.test(reply)) reply = ""; // «-»: nothing to say (an emoji after a goodbye)
     await logLine("user", history[history.length - 1].content);
     await logLine("agent", reply, Date.now() - t0);
     return { reply, booked };
@@ -1244,6 +1245,7 @@ async function instagramReply(env: Env, igUserId: string, senderId: string, mid:
   history.push({ role: "user", content: cleanText(text, 1000) });
   const out = await chatTurn(env, account.business_id, chatId, history);
   const reply = "error" in out ? "Ներողություն, հիմա չեմ կարողանում պատասխանել։ Փորձեք մի փոքր ուշ։" : out.reply;
+  if (!reply) return; // nothing to say (e.g. a like after the goodbye)
   // The stored token is the business's system user: it sends through the Facebook Page linked to the
   // Instagram account, with that Page's own token (the only way Meta accepted the reply).
   const payload = JSON.stringify({ recipient: { id: senderId }, message: { text: reply.slice(0, 1000) } });

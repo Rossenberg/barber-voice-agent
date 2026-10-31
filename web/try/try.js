@@ -126,12 +126,11 @@ $("chatForm").addEventListener("submit", async (e) => {
   try {
     const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: chatId, biz, messages: history }) });
     const data = await res.json();
-    if (!res.ok || !data.reply) throw new Error(data.error);
+    if (!res.ok || data.reply === undefined) throw new Error(data.error);
     chatId = data.id;
     typing.remove();
-    history.push({ role: "assistant", content: data.reply });
     if (data.booked) add(t("booked"), "tool ok", "chatLog");
-    add(data.reply, "agent", "chatLog");
+    if (data.reply) { history.push({ role: "assistant", content: data.reply }); add(data.reply, "agent", "chatLog"); }
   } catch {
     typing.remove();
     history.pop();

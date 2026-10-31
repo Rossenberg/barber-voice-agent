@@ -391,12 +391,11 @@ async function sendChat(text) {
   try {
     const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: chatId, messages: chatHistory }) });
     const data = await res.json();
-    if (!res.ok || !data.reply) throw new Error(data.error || res.status);
+    if (!res.ok || data.reply === undefined) throw new Error(data.error || res.status);
     chatId = data.id;
     typing.remove();
-    chatHistory.push({ role: "assistant", content: data.reply });
     if (data.booked) chatAdd(t("chat.booked"), "tool ok");
-    chatAdd(data.reply, "agent");
+    if (data.reply) { chatHistory.push({ role: "assistant", content: data.reply }); chatAdd(data.reply, "agent"); } // empty: nothing to say
   } catch (err) {
     console.error(err);
     typing.remove();
