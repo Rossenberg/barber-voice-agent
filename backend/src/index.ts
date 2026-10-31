@@ -709,7 +709,7 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       ? `Your name is ${name}. You answer the phone for the barbershop called exactly «${shop}». Never change, translate or invent the barbershop's name.`
       : `Your name is ${name}. You answer the website chat of the barbershop called exactly «${shop}». Never change, translate or invent the barbershop's name.`,
     address
-      ? `Address — when asked: «Մեր հասցեն է՝ ${address}։» exactly, nothing more (no building, landmark, floor or directions you weren't given). Anything else about getting there (parking, metro, traffic): «Այդ մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։»`
+      ? `Address — when asked: «Մեր հասցեն է՝ ${address}։» exactly, nothing more (no building, landmark, floor or directions you weren't given). Anything else about getting there (parking, metro, traffic): answer from the owner's notes below if they say something; otherwise «Այդ մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։»`
       : "The address isn't filled in: if asked, «Հասցեի մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։» Never invent one.",
     voice ? "The page has already greeted the caller, so don't greet again; answer what they say." : "The chat already showed a greeting, so don't greet again; answer what they write.",
     "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
@@ -742,7 +742,10 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
     `Next days (date, weekday, open or closed): ${Array.from({ length: 22 }, (_, i) => { const d = addDays(localNow().date, i); return `${d} ${weekdayName(d)}${settings.hours[weekdayOf(d)] ? "" : " closed"}`; }).join("; ")}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
     bookingsLine,
-    settings.extra_instructions ? `Extra instructions from the owner: ${settings.extra_instructions}` : "",
+    // The owner's notes go last but win over every «no exact information» rule above: they are this business's facts.
+    settings.extra_instructions
+      ? `Information from the owner (facts about this business — they override any «no exact information» rule above; answer from them, in polite Armenian, when a caller asks about these things; if a note says to always mention something, mention it once early in the conversation, not in every reply):\n${settings.extra_instructions}`
+      : "",
   ].filter(Boolean).join("\n");
 }
 
