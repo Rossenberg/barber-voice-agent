@@ -123,22 +123,72 @@ function closedReason(settings: Settings, date: string): ClosedReason | null {
 /** Free start times (minutes since midnight) on a date for a service of the given length.
  * `people` > 1: a group coming together needs that many free chairs at the same time. */
 /** ignoreBookingId: the caller's own booking they're changing, so its slot counts as free. */
-async function freeStarts(db: D1Database, biz: number, settings: Settings, date: string, durationMin: number, people = 1, ignoreBookingId = 0): Promise<number[]> {
+interface Barber { id: number; name: string; hours: ([number, number] | null)[] | null }
+
+async function getBarbers(db: D1Database, biz: number): Promise<Barber[]> {
+  const { results } = await db.prepare("SELECT id, name, hours FROM barbers WHERE business_id = ? AND active = 1 ORDER BY sort, id").bind(biz).all<{ id: number; name: string; hours: string | null }>();
+  return results.map((b) => ({ id: b.id, name: b.name, hours: b.hours ? JSON.parse(b.hours) : null }));
+}
+
+// Names reach us in Armenian, Latin or Cyrillic letters («Քերիմ», «Kerim», «Керим»): compared as Latin.
+const TO_LATIN: Record<string, string> = {
+  ա: "a", բ: "b", գ: "g", դ: "d", ե: "e", զ: "z", է: "e", ը: "e", թ: "t", ժ: "zh", ի: "i", լ: "l", խ: "kh", ծ: "ts", կ: "k", հ: "h", ձ: "dz", ղ: "gh", ճ: "ch", մ: "m", յ: "y", ն: "n", շ: "sh", ո: "o", չ: "ch", պ: "p", ջ: "j", ռ: "r", ս: "s", վ: "v", տ: "t", ր: "r", ց: "ts", ւ: "v", փ: "p", ք: "k", օ: "o", ֆ: "f", և: "ev",
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "sh", ы: "y", э: "e", ю: "yu", я: "ya",
+};
+const latinName = (x: string) => [...x.toLowerCase()].map((c) => TO_LATIN[c] ?? c).join("").replace(/x/g, "ks").replace(/ou/g, "u").replace(/[^a-z]/g, "");
+
+/** A barber the caller named («Քերիմ», «к Кериму», «Kerim», «Kerimi mot»): matched loosely by name. */
+function findBarber(barbers: Barber[], raw: unknown): Barber | undefined {
+  const norm = latinName;
+  const want = typeof raw === "string" ? norm(raw) : "";
+  if (!want) return undefined;
+  return barbers.find((b) => norm(b.name) === want) ?? barbers.find((b) => norm(b.name).startsWith(want.slice(0, 4)) || want.startsWith(norm(b.name).slice(0, 4)));
+}
+
+/**
+ * Who can take a client on a date: loads the day's bookings and closed hours once, then answers per start time.
+ * Without named barbers, `settings.barbers` chairs; with them, each barber's own hours, bookings and closed hours
+ * (bookings made before barbers existed take any free chair).
+ */
+async function dayCapacity(db: D1Database, biz: number, settings: Settings, date: string, ignoreBookingId = 0) {
+  const [{ results: bookings }, { results: blocks }] = await db.batch<{ start_min: number; end_min: number; barber_id: number | null }>([
+    db.prepare("SELECT start_min, end_min, barber_id FROM bookings WHERE business_id = ? AND date = ? AND status = 'confirmed' AND id != ?").bind(biz, date, ignoreBookingId),
+    db.prepare("SELECT start_min, end_min, barber_id FROM blocks WHERE business_id = ? AND date = ?").bind(biz, date),
+  ]);
+  const barbers = await getBarbers(db, biz);
+  const wd = weekdayOf(date);
+  const overlaps = (x: { start_min: number; end_min: number }, s: number, e: number) => x.start_min < e && x.end_min > s;
+  return {
+    barbers,
+    /** barbers free for [s, e) and how many chairs are left over */
+    at(s: number, e: number): { free: Barber[]; seats: number } {
+      if (blocks.some((b) => !b.barber_id && overlaps(b, s, e))) return { free: [], seats: 0 }; // the whole shop is closed then
+      const busy = bookings.filter((b) => overlaps(b, s, e));
+      if (!barbers.length) return { free: [], seats: settings.barbers - busy.length };
+      const free = barbers.filter((b) => {
+        const h = (b.hours ?? settings.hours)[wd];
+        return h && s >= h[0] && e <= h[1] && !busy.some((x) => x.barber_id === b.id) && !blocks.some((x) => x.barber_id === b.id && overlaps(x, s, e));
+      });
+      return { free, seats: free.length - busy.filter((x) => !x.barber_id).length };
+    },
+  };
+}
+
+/** Free start times (minutes since midnight) on a date for a service of the given length.
+ * `people` > 1: a group coming together needs that many free chairs at the same time.
+ * ignoreBookingId: the caller's own booking they're changing, so its slot counts as free.
+ * barberId: only this barber's free times. */
+async function freeStarts(db: D1Database, biz: number, settings: Settings, date: string, durationMin: number, people = 1, ignoreBookingId = 0, barberId = 0): Promise<number[]> {
   if (closedReason(settings, date)) return [];
   const [open, close] = settings.hours[weekdayOf(date)]!;
-  const [{ results }, { results: blocks }] = await db.batch<{ start_min: number; end_min: number }>([
-    db.prepare("SELECT start_min, end_min FROM bookings WHERE business_id = ? AND date = ? AND status = 'confirmed' AND id != ?").bind(biz, date, ignoreBookingId),
-    db.prepare("SELECT start_min, end_min FROM blocks WHERE business_id = ? AND date = ?").bind(biz, date),
-  ]);
-
+  const cap = await dayCapacity(db, biz, settings, date, ignoreBookingId);
   const now = localNow();
   const earliest = date === now.date ? now.minutes + MIN_NOTICE_MIN : 0;
   const starts: number[] = [];
   for (let s = Math.ceil(open / GRID_MIN) * GRID_MIN; s + durationMin <= close; s += GRID_MIN) {
     if (s < earliest) continue;
-    const e = s + durationMin;
-    if (blocks.some((b) => b.start_min < e && b.end_min > s)) continue; // the owner closed these hours
-    if (results.filter((b) => b.start_min < e && b.end_min > s).length + people <= settings.barbers) starts.push(s);
+    const { free, seats } = cap.at(s, s + durationMin);
+    if (barberId ? free.some((b) => b.id === barberId) && seats >= 1 : seats >= people) starts.push(s);
   }
   return starts;
 }
@@ -290,7 +340,11 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
   }
 
   const changing = Number(String(body.replace_booking_id ?? "").replace(/\D/g, "")) - 1000;
-  const starts = await freeStarts(env.DB, biz, settings, date, service.duration_min, people, changing > 0 ? changing : 0);
+  const barbers = await getBarbers(env.DB, biz);
+  const barber = findBarber(barbers, body.barber);
+  if (body.barber && !barber && barbers.length) return { ...base, error: "unknown_barber", message: `No barber called «${body.barber}». Barbers here: ${barbers.map((b) => b.name).join(", ")}.` };
+  const starts = await freeStarts(env.DB, biz, settings, date, service.duration_min, people, changing > 0 ? changing : 0, barber?.id ?? 0);
+  if (barbers.length) Object.assign(base, { barbers: barbers.map((b) => b.name), ...(barber ? { barber: barber.name } : {}) });
   // «առավոտյան ութին» is 8 in the morning: don't read it as the evening
   const requested = body.part_of_day === "morning" ? parseHHMM(body.time) : afternoon(settings, date, parseHHMM(body.time));
   if (requested !== null) {
@@ -311,6 +365,8 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
     }
     const free = starts.includes(requested);
     const near = free ? [] : nearest(starts, requested);
+    // with named barbers: who is free at the asked time (to offer a choice)
+    const freeBarbers = barbers.length && !barber ? (await dayCapacity(env.DB, biz, settings, date, changing > 0 ? changing : 0)).at(requested, requested + service.duration_min).free.map((b) => b.name) : [];
     // «at 9» when we open at 10 is not "taken" — say it's outside opening hours
     const [openMin, closeMin] = settings.hours[weekdayOf(date)]!;
     const outside = requested < openMin || requested + service.duration_min > closeMin;
@@ -320,6 +376,7 @@ async function calendarAnswer(env: Env, body: Record<string, unknown>, biz: numb
       requested_time: toHHMM(requested),
       requested_time_hy: timeHy(requested),
       requested_time_free: free,
+      ...(freeBarbers.length ? { free_barbers_at_time: freeBarbers } : {}),
       ...(outside ? { outside_opening_hours: true, opening_hours_that_day: `${toHHMM(openMin)}–${toHHMM(closeMin)}`, opens_hy: timeHy(openMin), closes_hy: timeHy(closeMin) } : {}),
       ...(free ? {} : { nearest_free_times: near, nearest_free_times_hy: hy(near), later_free_times: starts.filter((m) => m > requested).slice(0, 3).map(toHHMM), later_free_times_hy: hy(starts.filter((m) => m > requested).slice(0, 3).map(toHHMM)) }),
       ...(starts.length ? {} : { next_free_days: await nextOpenDays(env.DB, biz, settings, date, service.duration_min) }),
@@ -365,11 +422,11 @@ function earliestFree(date: string, starts: number[]) {
   };
 }
 
-async function insertBooking(env: Env, biz: number, service: Service, date: string, start: number, fields: { name: string; phone: string | null; source: string; conversationId: string }) {
+async function insertBooking(env: Env, biz: number, service: Service, date: string, start: number, fields: { name: string; phone: string | null; source: string; conversationId: string; barberId?: number | null }) {
   const res = await env.DB.prepare(
-    "INSERT INTO bookings (business_id, service_id, service_name, date, start_min, end_min, client_name, phone, source, conversation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+    "INSERT INTO bookings (business_id, service_id, service_name, date, start_min, end_min, client_name, phone, source, conversation_id, barber_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
   )
-    .bind(biz, service.id, service.name_hy, date, start, start + service.duration_min, fields.name || null, fields.phone, fields.source, fields.conversationId || null)
+    .bind(biz, service.id, service.name_hy, date, start, start + service.duration_min, fields.name || null, fields.phone, fields.source, fields.conversationId || null, fields.barberId ?? null)
     .first<{ id: number }>();
   return `B-${1000 + res!.id}`;
 }
@@ -434,30 +491,39 @@ async function createBooking(env: Env, body: Record<string, unknown>, caller: Ca
     replaced = old.id;
   }
 
-  const starts = await freeStarts(env.DB, caller.biz, settings, date, service.duration_min);
+  const barbers = await getBarbers(env.DB, caller.biz);
+  let barber = findBarber(barbers, body.barber);
+  if (body.barber && !barber && barbers.length) {
+    if (replaced) await env.DB.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").bind(replaced).run();
+    return { success: false, error: "unknown_barber", message: `No barber called «${body.barber}». Barbers here: ${barbers.map((b) => b.name).join(", ")}.` };
+  }
+  const starts = await freeStarts(env.DB, caller.biz, settings, date, service.duration_min, 1, 0, barber?.id ?? 0);
+  // no barber asked: the first one free at that time
+  if (barbers.length && !barber && starts.includes(start)) barber = (await dayCapacity(env.DB, caller.biz, settings, date)).at(start, start + service.duration_min).free[0];
   if (!starts.includes(start)) {
     if (replaced) await env.DB.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ?").bind(replaced).run();
     const near = nearest(starts, start);
     return { success: false, error: "slot_taken", message: replaced ? "This time is not free; the old booking is kept." : "This time is not free any more.", nearest_free_times: near, nearest_free_times_hy: hy(near) };
   }
   const bookingId = await insertBooking(env, caller.biz, service, date, start, {
+    barberId: barber?.id ?? null,
     name: cleanText(body.client_name, 60),
     phone,
     source: "assistant",
     conversationId,
   });
-  return { success: true, booking_id: bookingId, ...(replaced ? { replaced_booking_id: `B-${1000 + replaced}` } : {}), phone_saved: Boolean(phone), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}` };
+  return { success: true, booking_id: bookingId, ...(replaced ? { replaced_booking_id: `B-${1000 + replaced}` } : {}), phone_saved: Boolean(phone), ...(barber ? { barber: barber.name } : {}), summary: `${service.name_hy}, ${weekdayName(date)} ${date} ${toHHMM(start)}${barber ? `, ${barber.name}` : ""}` };
 }
 
 /** The caller's upcoming bookings: made in this conversation, or under the number they're calling from. */
 async function findBookings(env: Env, caller: Caller) {
   const today = localNow().date;
   const { results } = await env.DB.prepare(
-    "SELECT id, service_name, date, start_min, client_name, phone, conversation_id FROM bookings WHERE business_id = ? AND status = 'confirmed' AND date >= ? AND (conversation_id = ? OR (? IS NOT NULL AND phone = ?)) ORDER BY date, start_min",
-  ).bind(caller.biz, today, caller.conv, caller.phone, caller.phone).all<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null }>();
+    "SELECT b.id, b.service_name, b.date, b.start_min, b.client_name, b.phone, b.conversation_id, br.name AS barber FROM bookings b LEFT JOIN barbers br ON br.id = b.barber_id WHERE b.business_id = ? AND b.status = 'confirmed' AND b.date >= ? AND (b.conversation_id = ? OR (? IS NOT NULL AND b.phone = ?)) ORDER BY b.date, b.start_min",
+  ).bind(caller.biz, today, caller.conv, caller.phone, caller.phone).all<{ id: number; service_name: string; date: string; start_min: number; client_name: string | null; phone: string | null; conversation_id: string | null; barber: string | null }>();
   const bookings = results
     .filter((b) => b.date > today || b.start_min > localNow().minutes)
-    .map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, date: b.date, weekday: weekdayName(b.date), time: toHHMM(b.start_min), time_hy: timeHy(b.start_min), made_in_this_conversation: b.conversation_id === caller.conv }));
+    .map((b) => ({ booking_id: `B-${1000 + b.id}`, name: b.client_name, service: b.service_name, date: b.date, weekday: weekdayName(b.date), time: toHHMM(b.start_min), time_hy: timeHy(b.start_min), ...(b.barber ? { barber: b.barber } : {}), made_in_this_conversation: b.conversation_id === caller.conv }));
   if (bookings.length) return { bookings, next_step: "Now answer the caller in one or two sentences: name the booking they mean and do what they asked (another time → check it with replace_booking_id and ask «Փոխե՞մ»; cancel → «Չեղարկե՞մ …» unless they already clearly asked to cancel exactly that one)." };
   return caller.phone
     ? { bookings: [], message: "No upcoming bookings under the number they're calling from. If they booked with another number, the administrator will call back." }
@@ -646,6 +712,7 @@ const REALTIME_TOOLS = [
         people: { type: "integer", description: "How many people come at the same time (a group). Check with the longest person's services. Default 1." },
         replace_booking_id: { type: "string", description: "When checking a change to one of the caller's bookings (made in this conversation, or found with find_bookings): its booking_id, so its own slot counts as free." },
         service_named: { type: "boolean", description: "true only if the caller has already said which service(s) they want; false if you're assuming haircut." },
+        barber: { type: "string", description: "Only when the shop has named barbers and the client chose one: the barber's name as listed. Leave out for «any barber»." },
       },
       required: ["date", "service_named"],
     },
@@ -664,6 +731,7 @@ const REALTIME_TOOLS = [
         phone: { type: "string" },
         replace_booking_id: { type: "string", description: "When the caller changes one of their bookings (other service, time or person): its booking_id (e.g. B-1031). The old one is cancelled, never booked twice." },
         service_named: { type: "boolean", description: "true only if the caller said which service(s) they want." },
+        barber: { type: "string", description: "The barber the client chose (name as listed), if the shop has named barbers. Leave out for «any barber» — the first free one is assigned." },
         phone_confirmed: { type: "boolean", description: "true only after the caller agreed to this number: their own number → they said yes to «Գրանցե՞մ այն համարով, որից զանգում եք։»; a dictated one → they confirmed its last two digits." },
         same_name_as_assistant: { type: "boolean", description: "Only if the caller said their own name is Անի / Արամ (the same as yours)." },
       },
@@ -701,6 +769,10 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       : "The caller has no upcoming bookings under the number they're calling from: if they say they're booked, it was under another number — the administrator will call back.";
   }
   const address = settings.address.trim();
+  const barberNames = (await getBarbers(env.DB, opts.biz)).map((b) => b.name);
+  const barbersLine = !barberNames.length ? "" : opts.channel === "chat"
+    ? `Barbers here: ${barberNames.join(", ")} (each has their own hours). Once the service and the day are known, ask whom they'd like — «Ո՞ր բարբերի մոտ եք ցանկանում գրանցվել՝ ${barberNames.join(", ")}, թե՞ առաջին ազատի մոտ։» — unless they already named one. Pass the chosen name as barber to check_availability and create_booking (and check that barber's times); «any / doesn't matter» → leave barber out. Say whose booking it is when confirming. Names may be written in Latin or Armenian letters — match them to the list.`
+    : `Barbers here: ${barberNames.join(", ")}. If the caller names one, pass it as barber to check_availability and create_booking.`;
   const { name, callerPhone } = opts;
   const voice = opts.channel === "voice";
   const shop = voice ? settings.shop_name_spoken || settings.shop_name : settings.shop_name;
@@ -743,6 +815,7 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
     `Next days (date, weekday, open or closed): ${Array.from({ length: 22 }, (_, i) => { const d = addDays(localNow().date, i); return `${d} ${weekdayName(d)}${settings.hours[weekdayOf(d)] ? "" : " closed"}`; }).join("; ")}.`,
     `Price list (id | Armenian | English | duration | price) — use only these, never invent services or prices:\n${servicesText}`,
     bookingsLine,
+    barbersLine,
     // The owner's notes go last but win over every «no exact information» rule above: they are this business's facts.
     settings.extra_instructions
       ? `Information from the owner (facts about this business — they override any «no exact information» rule above; answer from them, in polite Armenian, when a caller asks about these things; if a note says to always mention something, mention it once early in the conversation, woven in naturally («Ի դեպ, այս շաբաթ…»), not in every reply; a discount that doesn't name services applies to ALL services, one that names a service applies only to it — say which; never invent discounts, payment methods or conditions that aren't written here):\n${settings.extra_instructions}`
@@ -1022,7 +1095,7 @@ async function shopState(env: Env, biz: number) {
     env.DB.prepare("SELECT * FROM blocks WHERE business_id = ? AND date >= ? ORDER BY date, start_min").bind(biz, from),
   ]);
   const b = await env.DB.prepare("SELECT slug, category FROM businesses WHERE id = ?").bind(biz).first<{ slug: string; category: string }>();
-  return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
+  return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), barbers: await getBarbers(env.DB, biz), bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
 }
 
 /**
@@ -1125,14 +1198,38 @@ async function shopApi(env: Env, biz: number, method: string, sub: string, body:
     return json({ services });
   }
 
+  // Named barbers: the whole list is saved at once; removed ones are hidden (their past bookings keep the name).
+  if (sub === "barbers" && method === "PUT") {
+    if (!Array.isArray(body.barbers) || body.barbers.length > 30) throw new HttpError(400, "0–30 barbers");
+    const keep: number[] = [];
+    for (const [i, raw] of (body.barbers as Record<string, unknown>[]).entries()) {
+      const name = cleanText(raw.name, 40);
+      if (!name) continue;
+      const hours = raw.hours == null ? null : JSON.stringify(validSettings({ hours: raw.hours }, await getSettings(env.DB, biz)).hours);
+      const id = Number(raw.id);
+      if (id > 0) {
+        await env.DB.prepare("UPDATE barbers SET name = ?, hours = ?, sort = ?, active = 1 WHERE id = ? AND business_id = ?").bind(name, hours, i, id, biz).run();
+        keep.push(id);
+      } else {
+        const row = await env.DB.prepare("INSERT INTO barbers (business_id, name, hours, sort) VALUES (?, ?, ?, ?) RETURNING id").bind(biz, name, hours, i).first<{ id: number }>();
+        keep.push(row!.id);
+      }
+    }
+    await env.DB.prepare(`UPDATE barbers SET active = 0 WHERE business_id = ? ${keep.length ? `AND id NOT IN (${keep.join(",")})` : ""}`).bind(biz).run();
+    return json({ barbers: await getBarbers(env.DB, biz) });
+  }
+
   if (sub === "bookings" && method === "POST") {
     const settings = await getSettings(env.DB, biz);
     const service = findService(await getServices(env.DB, biz, false), body.service_id);
     const start = parseHHMM(body.time);
     if (!service || !isDate(body.date) || start === null) throw new HttpError(400, "service, date and time are required");
-    const starts = await freeStarts(env.DB, biz, settings, body.date, service.duration_min);
+    const barberId = Number(body.barber_id) || 0;
+    const starts = await freeStarts(env.DB, biz, settings, body.date, service.duration_min, 1, 0, barberId);
     if (!starts.includes(start)) return json({ error: "slot_taken" }, 409);
+    const auto = !barberId && (await getBarbers(env.DB, biz)).length ? (await dayCapacity(env.DB, biz, settings, body.date)).at(start, start + service.duration_min).free[0]?.id ?? null : null;
     const bookingId = await insertBooking(env, biz, service, body.date, start, {
+      barberId: barberId || auto,
       name: cleanText(body.client_name, 60),
       phone: normalizePhone(body.phone),
       source: "manual",
@@ -1151,8 +1248,8 @@ async function shopApi(env: Env, biz: number, method: string, sub: string, body:
   if (sub === "blocks" && method === "POST") {
     const start = parseHHMM(body.from), end = parseHHMM(body.to);
     if (!isDate(body.date) || start === null || end === null || start >= end) throw new HttpError(400, "date, from and to are required");
-    const res = await env.DB.prepare("INSERT INTO blocks (business_id, date, start_min, end_min, note) VALUES (?, ?, ?, ?, ?) RETURNING id")
-      .bind(biz, body.date, start, end, cleanText(body.note, 80) || null).first<{ id: number }>();
+    const res = await env.DB.prepare("INSERT INTO blocks (business_id, date, start_min, end_min, note, barber_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")
+      .bind(biz, body.date, start, end, cleanText(body.note, 80) || null, Number(body.barber_id) || null).first<{ id: number }>();
     return json({ id: res!.id });
   }
   const unblock = /^blocks\/(\d+)\/delete$/.exec(sub);

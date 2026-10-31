@@ -35,6 +35,8 @@ const T = {
     "set.business": "Бизнес", "set.name": "Название", "set.spoken": "Как ассистент произносит название (армянскими буквами)", "set.address": "Адрес",
     "set.barbers": "Сколько клиентов можно принять одновременно (мастеров)", "set.hours": "Часы работы", "set.extra": "Что ещё должен знать ассистент", "set.extraHint": "Парковка, оплата картой, акции — коротко, любым языком.",
     "set.saved": "Сохранено.",
+    "br.title": "Барберы", "br.sub": "Добавьте мастеров — ассистент спросит клиента, к кому записать, и запишет по графику этого мастера.", "br.add": "Барбер", "br.save": "Сохранить барберов",
+    "br.name": "Имя барбера", "br.own": "Свой график (иначе — как у салона)", "br.saved": "Барберы сохранены.", "br.all": "Все", "br.any": "Любой свободный", "br.whole": "Весь салон", "br.who": "Барбер",
     "ig.off": "Подключите Instagram — ассистент будет отвечать клиентам в Direct и записывать их в календарь.", "ig.on": "Подключено:", "ig.connect": "Подключить Instagram", "ig.reconnect": "Переподключить", "ig.disconnect": "Отключить Instagram",
     "ig.hint": "Нужен профессиональный аккаунт Instagram (Бизнес или Автор), привязанный к странице Facebook.", "ig.ok": "Instagram подключён. Ассистент уже отвечает в Direct.", "ig.failed": "Не удалось подключить Instagram. Попробуйте ещё раз.",
     "ig.cancelled": "Подключение отменено.", "ig.nopage": "Не нашли Instagram, привязанный к странице Facebook. Привяжите его в настройках Instagram и попробуйте снова.", "ig.offAsk": "Отключить Instagram? Ассистент перестанет отвечать в Direct.",
@@ -79,6 +81,8 @@ const T = {
     "set.business": "Բիզնես", "set.name": "Անվանում", "set.spoken": "Ինչպես է օգնականն արտասանում անվանումը (հայերեն տառերով)", "set.address": "Հասցե",
     "set.barbers": "Քանի հաճախորդ կարելի է ընդունել միաժամանակ (վարպետներ)", "set.hours": "Աշխատանքային ժամեր", "set.extra": "Ինչ ևս պետք է իմանա օգնականը", "set.extraHint": "Կայանատեղի, քարտով վճարում, ակցիաներ՝ կարճ, ցանկացած լեզվով։",
     "set.saved": "Պահպանված է։",
+    "br.title": "Բարբերներ", "br.sub": "Ավելացրեք վարպետներին. օգնականը կհարցնի հաճախորդին՝ ում մոտ գրանցել, և կգրանցի այդ վարպետի գրաֆիկով։", "br.add": "Բարբեր", "br.save": "Պահպանել բարբերներին",
+    "br.name": "Բարբերի անունը", "br.own": "Առանձին գրաֆիկ (այլապես՝ սրահի ժամերով)", "br.saved": "Բարբերները պահպանված են։", "br.all": "Բոլորը", "br.any": "Ցանկացած ազատ", "br.whole": "Ամբողջ սրահը", "br.who": "Բարբեր",
     "ig.off": "Միացրեք Instagram-ը, և օգնականը կպատասխանի հաճախորդներին Direct-ում ու կգրանցի նրանց օրացույցում։", "ig.on": "Միացված է՝", "ig.connect": "Միացնել Instagram-ը", "ig.reconnect": "Կրկին միացնել", "ig.disconnect": "Անջատել Instagram-ը",
     "ig.hint": "Անհրաժեշտ է Instagram-ի մասնագիտական հաշիվ (Բիզնես կամ Հեղինակ)՝ կապված Facebook էջին։", "ig.ok": "Instagram-ը միացված է։ Օգնականն արդեն պատասխանում է Direct-ում։", "ig.failed": "Չհաջողվեց միացնել Instagram-ը։ Փորձեք կրկին։",
     "ig.cancelled": "Միացումը չեղարկվեց։", "ig.nopage": "Facebook էջին կապված Instagram չգտանք։ Կապեք այն Instagram-ի կարգավորումներում և փորձեք կրկին։", "ig.offAsk": "Անջատե՞լ Instagram-ը։ Օգնականը կդադարի պատասխանել Direct-ում։",
@@ -238,6 +242,7 @@ async function reload() {
 function render() {
   $("bizName").textContent = state.settings.shop_name;
   $("cabTitle").textContent = state.settings.shop_name;
+  renderBarberChips();
   renderDays();
   renderDay();
   renderServices();
@@ -257,14 +262,31 @@ document.querySelectorAll(".cab-tabs button").forEach((b) => b.addEventListener(
 const hoursOf = (d) => state.settings.hours[weekday(d)];
 const dayLabel = (d) => d === state.today ? t("cal.today") : d === addDays(state.today, 1) ? t("cal.tomorrow") : t("daysLong")[weekday(d)];
 
+let barberFilter = 0; // 0 = all barbers
+const barberName = (id) => state.barbers?.find((b) => b.id === id)?.name ?? "";
+function renderBarberChips() {
+  const wrap = $("barberChips");
+  wrap.hidden = !state.barbers?.length;
+  if (wrap.hidden) { barberFilter = 0; return; }
+  if (barberFilter && !state.barbers.some((b) => b.id === barberFilter)) barberFilter = 0;
+  wrap.replaceChildren(...[{ id: 0, name: t("br.all") }, ...state.barbers].map((b) => {
+    const btn = document.createElement("button");
+    btn.textContent = b.name;
+    btn.setAttribute("aria-pressed", String(b.id === barberFilter));
+    btn.addEventListener("click", () => { barberFilter = b.id; renderBarberChips(); renderDays(); renderDay(); });
+    return btn;
+  }));
+}
+const barberHoursOf = (d) => { const b = state.barbers?.find((x) => x.id === barberFilter); return (b?.hours ?? state.settings.hours)[weekday(d)]; };
+
 function renderDays() {
   const wrap = $("days");
   wrap.replaceChildren();
   for (let i = 0; i < 21; i++) {
     const d = addDays(state.today, i);
-    const n = state.bookings.filter((b) => b.date === d && b.status === "confirmed").length;
+    const n = state.bookings.filter((b) => b.date === d && b.status === "confirmed" && (!barberFilter || b.barber_id === barberFilter)).length;
     const btn = document.createElement("button");
-    btn.className = `day${hoursOf(d) ? "" : " closed"}`;
+    btn.className = `day${hoursOf(d) && barberHoursOf(d) ? "" : " closed"}`;
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", String(d === day));
     btn.innerHTML = `<small>${t("days")[weekday(d)]}</small><b>${Number(d.slice(8))}</b>${n ? `<span class="cnt">${n}</span>` : ""}`;
@@ -275,12 +297,12 @@ function renderDays() {
 }
 
 function renderDay() {
-  const h = hoursOf(day);
+  const h = hoursOf(day) && barberHoursOf(day);
   $("dayTitle").textContent = `${dayLabel(day)}, ${Number(day.slice(8))} ${t("months")[Number(day.slice(5, 7)) - 1]}`;
   $("dayHours").textContent = h ? `${hhmm(h[0])}–${hhmm(h[1])}` : t("cal.closedDay");
   const items = [
-    ...state.bookings.filter((b) => b.date === day).map((b) => ({ kind: "booking", start: b.start_min, b })),
-    ...state.blocks.filter((b) => b.date === day).map((b) => ({ kind: "block", start: b.start_min, b })),
+    ...state.bookings.filter((b) => b.date === day && (!barberFilter || b.barber_id === barberFilter)).map((b) => ({ kind: "booking", start: b.start_min, b })),
+    ...state.blocks.filter((b) => b.date === day && (!barberFilter || !b.barber_id || b.barber_id === barberFilter)).map((b) => ({ kind: "block", start: b.start_min, b })),
   ].sort((a, b) => a.start - b.start || (a.b.status === "cancelled") - (b.b.status === "cancelled"));
   const list = $("dayList");
   if (!items.length) {
@@ -291,7 +313,7 @@ function renderDay() {
     const el = document.createElement("div");
     if (kind === "block") {
       el.className = "item block";
-      el.innerHTML = `<div class="t">${hhmm(b.start_min)}<small>${hhmm(b.end_min)}</small></div><div class="who"><b>${esc(t("cal.closed"))}</b><span>${esc(b.note ?? "")}</span></div><button class="icon-btn" aria-label="${esc(t("cal.unblockAsk"))}">×</button>`;
+      el.innerHTML = `<div class="t">${hhmm(b.start_min)}<small>${hhmm(b.end_min)}</small></div><div class="who"><b>${esc(t("cal.closed"))}${b.barber_id ? ` · ${esc(barberName(b.barber_id))}` : ""}</b><span>${esc(b.note ?? "")}</span></div><button class="icon-btn" aria-label="${esc(t("cal.unblockAsk"))}">×</button>`;
       el.querySelector("button").addEventListener("click", async () => {
         if (!confirm(t("cal.unblockAsk"))) return;
         try { await api(`/api/app/blocks/${b.id}/delete`, {}); await reload(); } catch (e) { toast(errText(e), true); }
@@ -299,7 +321,7 @@ function renderDay() {
     } else {
       const cancelled = b.status !== "confirmed";
       el.className = `item${cancelled ? " cancelled" : ""}`;
-      const source = b.source === "manual" ? `<span class="tag">${esc(t("cal.manual"))}</span>` : `<span class="tag ai">UMNIK</span>`;
+      const source = (b.source === "manual" ? `<span class="tag">${esc(t("cal.manual"))}</span>` : `<span class="tag ai">UMNIK</span>`) + (b.barber_id ? `<span class="tag barber">${esc(barberName(b.barber_id))}</span>` : "");
       el.innerHTML = `<div class="t">${hhmm(b.start_min)}<small>${hhmm(b.end_min)}</small></div>
         <div class="who"><b>${esc(b.client_name || "—")}</b><span>${esc(b.service_name)}${b.phone ? ` · <a href="tel:${esc(b.phone)}">${esc(b.phone)}</a>` : ""}</span>
         <div class="tags">${source}${cancelled ? `<span class="tag">${esc(t("cal.cancelled"))}</span>` : ""}</div></div>
@@ -337,6 +359,7 @@ $("addBooking").addEventListener("click", () => {
   openDialog(t("dlg.booking"), `
     <label class="field"><span>${esc(t("dlg.service"))}</span><select class="input" name="service_id">${services.map((s) => `<option value="${esc(s.id)}">${esc(lang === "hy" ? s.name_hy : s.name_en)} · ${s.duration_min}′</option>`).join("")}</select></label>
     <label class="field"><span>${esc(t("dlg.time"))}</span><select class="input" name="time">${timeOptions(h[0], h[1] - 30)}</select></label>
+    ${state.barbers?.length ? `<label class="field"><span>${esc(t("br.who"))}</span><select class="input" name="barber_id"><option value="">${esc(t("br.any"))}</option>${state.barbers.map((b) => `<option value="${b.id}" ${b.id === barberFilter ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
     <label class="field"><span>${esc(t("dlg.client"))}</span><input class="input" name="client_name" maxlength="60"></label>
     <label class="field"><span>${esc(t("dlg.phone"))}</span><input class="input" name="phone" type="tel" inputmode="tel" placeholder="+374 …"></label>`,
   (d) => api("/api/app/bookings", { ...d, date: day }));
@@ -347,8 +370,9 @@ $("addBlock").addEventListener("click", () => {
     <label class="switch-row"><span><b>${esc(t("dlg.allDay"))}</b></span><input type="checkbox" class="switch" name="all_day"></label>
     <div class="row2"><label class="field"><span>${esc(t("dlg.from"))}</span><select class="input" name="from">${timeOptions(h[0], h[1] - 30)}</select></label>
     <label class="field"><span>${esc(t("dlg.to"))}</span><select class="input" name="to">${timeOptions(h[0] + 30, h[1])}</select></label></div>
+    ${state.barbers?.length ? `<label class="field"><span>${esc(t("br.who"))}</span><select class="input" name="barber_id"><option value="">${esc(t("br.whole"))}</option>${state.barbers.map((b) => `<option value="${b.id}" ${b.id === barberFilter ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
     <label class="field"><span>${esc(t("dlg.note"))}</span><input class="input" name="note" maxlength="80"></label>`,
-  (d) => api("/api/app/blocks", d.all_day ? { date: day, from: hhmm(h[0]), to: hhmm(h[1]), note: d.note } : { date: day, from: d.from, to: d.to, note: d.note }));
+  (d) => api("/api/app/blocks", d.all_day ? { date: day, from: hhmm(h[0]), to: hhmm(h[1]), note: d.note, barber_id: d.barber_id } : { date: day, from: d.from, to: d.to, note: d.note, barber_id: d.barber_id }));
 });
 
 // services
@@ -416,7 +440,61 @@ $("igDisconnect").addEventListener("click", async () => {
   try { await api("/api/app/instagram/disconnect", {}); await loadInstagram(); } catch (e) { toast(errText(e), true); }
 });
 
+// one week of hours as editable rows (the shop's and each barber's)
+function hoursEditor(container, hours) {
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  container.replaceChildren(...order.map((wd) => {
+    const h = hours[wd];
+    const row = document.createElement("div");
+    row.className = `hour${h ? "" : " closed"}`;
+    row.dataset.wd = wd;
+    row.innerHTML = `<label class="hour-name"><input type="checkbox" class="switch" ${h ? "checked" : ""}>${esc(t("daysLong")[wd])}</label>
+      <div class="hour-times"><input class="input" type="time" step="1800" value="${hhmm(h?.[0] ?? 600)}"><span>–</span><input class="input" type="time" step="1800" value="${hhmm(h?.[1] ?? 1200)}"></div>`;
+    row.querySelector(".switch").addEventListener("change", (e) => row.classList.toggle("closed", !e.target.checked));
+    return row;
+  }));
+}
+function readHours(container) {
+  const hours = [];
+  container.querySelectorAll(".hour").forEach((row) => {
+    const [a, b] = row.querySelectorAll('input[type="time"]');
+    hours[Number(row.dataset.wd)] = row.querySelector(".switch").checked ? [toMin(a.value), toMin(b.value)] : null;
+  });
+  return hours;
+}
+
+let editBarbers = null;
+function renderBarbers() {
+  editBarbers ??= (state.barbers ?? []).map((b) => ({ ...b }));
+  $("barbersList").replaceChildren(...editBarbers.map((b, i) => {
+    const el = document.createElement("div");
+    el.className = "barber-row";
+    el.innerHTML = `<div class="barber-top"><input class="input" maxlength="40" placeholder="${esc(t("br.name"))}" value="${esc(b.name ?? "")}"><button class="icon-btn" type="button" aria-label="×">×</button></div>
+      <label class="barber-own"><input type="checkbox" class="switch" ${b.hours ? "checked" : ""}>${esc(t("br.own"))}</label><div class="hours" ${b.hours ? "" : "hidden"}></div>`;
+    const hoursBox = el.querySelector(".hours");
+    hoursEditor(hoursBox, b.hours ?? state.settings.hours);
+    el.querySelector(".barber-top input").addEventListener("input", (e) => (b.name = e.target.value));
+    el.querySelector(".barber-own input").addEventListener("change", (e) => { hoursBox.hidden = !e.target.checked; b.own = e.target.checked; });
+    b.own = !!b.hours;
+    b.box = hoursBox;
+    el.querySelector(".icon-btn").addEventListener("click", () => { editBarbers.splice(i, 1); renderBarbers(); });
+    return el;
+  }));
+}
+$("addBarber").addEventListener("click", () => { editBarbers.push({ name: "", hours: null }); renderBarbers(); $("barbersList").lastElementChild.querySelector("input").focus(); });
+$("saveBarbers").addEventListener("click", async () => {
+  const msg = $("brMsg");
+  try {
+    await api("/api/app/barbers", { barbers: editBarbers.filter((b) => b.name?.trim()).map((b) => ({ id: b.id, name: b.name.trim(), hours: b.own ? readHours(b.box) : null })) }, "PUT");
+    editBarbers = null;
+    await reload();
+    msg.textContent = t("br.saved");
+    msg.className = "form-msg ok";
+  } catch (e) { msg.textContent = errText(e); msg.className = "form-msg"; }
+});
+
 function renderSettings() {
+  renderBarbers();
   const f = $("setForm"), s = state.settings;
   f.enabled.checked = s.enabled;
   for (const k of ["shop_name", "shop_name_spoken", "address", "barbers", "extra_instructions"]) f[k].value = s[k] ?? "";

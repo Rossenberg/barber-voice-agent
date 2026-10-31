@@ -103,6 +103,7 @@
 
     <!-- calendar -->
     <section class="pane" data-pane="calendar">
+      <div class="ranges barber-chips" id="barberChips" hidden></div>
       <div class="days" id="days" role="tablist" aria-label="Days"></div>
       <div class="day-head">
         <div><h2 id="dayTitle"></h2><p class="muted" id="dayHours"></p></div>
@@ -143,6 +144,13 @@
           <label class="field"><span data-i18n="set.spoken">Как ассистент произносит название (армянскими буквами)</span><input class="input" name="shop_name_spoken" maxlength="60" placeholder="Բլեյդ բարբեր շոփ"></label>
           <label class="field"><span data-i18n="set.address">Адрес</span><input class="input" name="address" maxlength="120"></label>
           <label class="field"><span data-i18n="set.barbers">Сколько клиентов можно принять одновременно (мастеров)</span><input class="input" name="barbers" type="number" min="1" max="20"></label>
+        </div>
+        <div class="set-card">
+          <h3 data-i18n="br.title">Барберы</h3>
+          <p class="muted" data-i18n="br.sub">Добавьте мастеров — ассистент спросит клиента, к кому записать, и запишет по графику этого мастера.</p>
+          <div id="barbersList" class="barbers-list"></div>
+          <button class="btn btn-ghost btn-sm" type="button" id="addBarber"><span>＋</span> <span data-i18n="br.add">Барбер</span></button>
+          <div class="save-bar inline"><p class="form-msg" id="brMsg"></p><button class="btn btn-primary" type="button" id="saveBarbers" data-i18n="br.save">Сохранить барберов</button></div>
         </div>
         <div class="set-card">
           <h3 data-i18n="set.hours">Часы работы</h3>

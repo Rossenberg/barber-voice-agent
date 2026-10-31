@@ -185,3 +185,14 @@ textarea.input { padding: 12px 16px; min-height: 96px; resize: vertical; line-he
   .cab-tabs button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bars { height: 120px; }
 }
+
+/* barbers */
+.barbers-list { display: grid; gap: 10px; }
+.barber-row { border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: grid; gap: 10px; }
+.barber-top { display: flex; gap: 8px; align-items: center; }
+.barber-top .input { flex: 1; min-width: 0; min-height: 44px; }
+.barber-own { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.barber-row .hours { padding-top: 4px; }
+.save-bar.inline { position: static; margin: 0; padding: 0; background: none; backdrop-filter: none; }
+.barber-chips { margin-bottom: 10px; }
+.tag.barber { background: #eef2ff; color: #3730a3; }
