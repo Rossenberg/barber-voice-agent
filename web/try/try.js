@@ -1,12 +1,12 @@
 // Test page for one business's assistant (/try/?biz=<slug>): the same chat as the landing demo and Instagram Direct.
 const T = {
   ru: {
-    back: "← В кабинет", hint: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.", hintShop: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Вставьте ссылку на пост — как будто клиент переслал его.",
+    back: "← В кабинет", hint: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.", hintShop: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Вставьте ссылку на пост или отправьте фото вещи — как будто это клиент.",
     notFound: "Бизнес не найден", on: "Ассистент включён", off: "Ассистент выключен", ready: "Готов", offState: "Выключен", disabled: "Ассистент выключен в кабинете.",
     placeholder: "Напишите сообщение…", greet: "Здравствуйте! Это {shop}, я Ани. Чем могу помочь?", chatError: "Не удалось ответить, попробуйте ещё раз.", booked: "Записано ✓",
   },
   hy: {
-    back: "← Վերադառնալ էջ", hint: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Գրանցումը կհայտնվի Ձեր օրացույցում։", hintShop: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Տեղադրեք գրառման հղումը, ասես հաճախորդն է այն ուղարկել։",
+    back: "← Վերադառնալ էջ", hint: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Գրանցումը կհայտնվի Ձեր օրացույցում։", hintShop: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Տեղադրեք գրառման հղումը կամ ուղարկեք իրի լուսանկարը, ասես հաճախորդն եք։",
     notFound: "Բիզնեսը չի գտնվել", on: "Օգնականը միացված է", off: "Օգնականն անջատված է", ready: "Պատրաստ է", offState: "Անջատված է", disabled: "Օգնականն անջատված է էջում։",
     placeholder: "Գրեք հաղորդագրություն…", chatError: "Չհաջողվեց պատասխանել, փորձեք կրկին։", booked: "Գրանցված է ✓",
   },
@@ -38,6 +38,7 @@ async function load() {
   $("assistant").hidden = false;
   $("shopName").textContent = config.shop_name;
   if (config.category === "shop") document.querySelector('[data-i18n="hint"]').textContent = t("hintShop");
+  $("chatPhoto").hidden = config.category !== "shop";
   $("av").textContent = config.shop_name.trim()[0]?.toUpperCase() ?? "U";
   $("pillDot").classList.toggle("off", !config.enabled);
   $("pillText").textContent = t(config.enabled ? "on" : "off");
@@ -50,17 +51,21 @@ async function load() {
 }
 
 let chatId = null, history = [], busy = false;
-$("chatForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = $("chatInput").value.trim();
-  if (!text || busy) return;
-  $("chatInput").value = "";
+async function send(text, photo = null) {
+  if ((!text && !photo) || busy) return;
   busy = true;
-  history.push({ role: "user", content: text });
-  add(text, "user");
+  // a photo goes with this one message; the history keeps «[photo]» in its place
+  history.push({ role: "user", content: [photo ? "[photo]" : "", text].filter(Boolean).join("\n") });
+  if (photo) {
+    const img = document.createElement("img");
+    img.src = photo;
+    img.alt = "";
+    add("", "user photo").append(img);
+  }
+  if (text) add(text, "user");
   const typing = add("•••", "agent typing");
   try {
-    const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: chatId, biz, messages: history }) });
+    const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: chatId, biz, messages: history, image: photo }) });
     const data = await res.json();
     if (!res.ok || data.reply === undefined) throw new Error(data.error);
     chatId = data.id;
@@ -74,6 +79,31 @@ $("chatForm").addEventListener("submit", async (e) => {
   } finally {
     busy = false;
     $("chatInput").focus();
+  }
+}
+$("chatForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("chatInput").value.trim();
+  $("chatInput").value = "";
+  send(text);
+});
+// shops: a photo of the thing the client wants, as an 800px JPEG
+$("chatFile").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const img = await createImageBitmap(file);
+    const k = Math.min(1, 800 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const text = $("chatInput").value.trim();
+    $("chatInput").value = "";
+    send(text, c.toDataURL("image/jpeg", 0.8));
+  } catch {
+    add(t("chatError"), "tool");
   }
 });
 

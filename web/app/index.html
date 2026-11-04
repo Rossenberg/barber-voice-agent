@@ -153,6 +153,17 @@
           <h3 data-i18n="set.business">Бизнес</h3>
           <label class="field"><span data-i18n="set.name">Название</span><input class="input" name="shop_name" maxlength="60"></label>
           <label class="field" hidden><span data-i18n="set.spoken">Как ассистент произносит название (армянскими буквами)</span><input class="input" name="shop_name_spoken" maxlength="60" placeholder="Բլեյդ բարբեր շոփ"></label>
+          <label class="field" data-for="shop" hidden><span data-i18n="set.kind">Тип бизнеса</span>
+            <select class="input" name="business_type">
+              <option value="clothing store" data-i18n="kind.clothes">Одежда и обувь</option>
+              <option value="perfume and cosmetics shop" data-i18n="kind.perfume">Парфюмерия и косметика</option>
+              <option value="shop" data-i18n="kind.shop">Другой магазин</option>
+              <option value="dental clinic" data-i18n="kind.dental">Стоматология или клиника</option>
+              <option value="restaurant" data-i18n="kind.restaurant">Ресторан, кафе или доставка еды</option>
+              <option value="travel agency" data-i18n="kind.travel">Турагентство</option>
+              <option value="service business" data-i18n="kind.service">Услуги</option>
+            </select>
+          </label>
           <label class="field"><span data-i18n="set.address">Адрес</span><input class="input" name="address" maxlength="120"></label>
           <label class="field" data-for="barber"><span data-i18n="set.barbers">Сколько клиентов можно принять одновременно (мастеров)</span><input class="input" name="barbers" type="number" min="1" max="20"></label>
         </div>

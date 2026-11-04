@@ -51,6 +51,7 @@ interface Settings {
   hours: ([number, number] | null)[]; // index 0 = Sunday; minutes since midnight; null = closed
   extra_instructions: string;
   delivery?: string; // shops: delivery and payment terms
+  business_type?: string; // shops: what kind of business, in English for the prompt («clothing store», «dental clinic»)
 }
 
 interface Service {
@@ -959,7 +960,7 @@ const CHAT_MODEL = "gpt-6.1-terra";
 
 /** Website chat: same instructions, phrasebook and calendar tools as the voice assistant, in text. */
 async function chatReply(env: Env, req: Request): Promise<Response> {
-  const body = (await req.json().catch(() => ({}))) as { id?: string; biz?: string; messages?: { role?: string; content?: string }[]; model?: string };
+  const body = (await req.json().catch(() => ({}))) as { id?: string; biz?: string; messages?: { role?: string; content?: string }[]; model?: string; image?: unknown };
   const biz = await bizBySlug(env.DB, body.biz);
   const chatId = cleanText(body.id, 64) || crypto.randomUUID();
   const history = (body.messages ?? [])
@@ -968,7 +969,9 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
     .map((m) => ({ role: m.role as "user" | "assistant", content: cleanText(m.content, 1000) }));
   if (!history.length || history[history.length - 1].role !== "user") return json({ error: "bad_request" }, 400);
   const model = CHAT_MODELS.includes(body.model ?? "") ? body.model! : CHAT_MODEL;
-  const out = await chatTurn(env, biz, chatId, history, model);
+  // a photo the client attached to their last message (shops look it up in the catalog)
+  const image = typeof body.image === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(body.image) && body.image.length < 1_500_000 ? body.image : undefined;
+  const out = await chatTurn(env, biz, chatId, history, model, image);
   return "error" in out ? json({ error: out.error }, 502) : json({ id: chatId, reply: out.reply, booked: out.booked, model });
 }
 
@@ -976,14 +979,25 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
  * One chat reply with the calendar tools — the website chat and Instagram Direct share it.
  * chatId is the conversation (bookings made in it are the writer's own).
  */
-async function chatTurn(env: Env, biz: number, chatId: string, history: { role: "user" | "assistant"; content: string }[], model = CHAT_MODEL): Promise<{ reply: string; booked: boolean } | { error: string }> {
+async function chatTurn(env: Env, biz: number, chatId: string, history: { role: "user" | "assistant"; content: string }[], model = CHAT_MODEL, image?: string): Promise<{ reply: string; booked: boolean } | { error: string }> {
   // Shops have no calendar: the assistant answers from the catalog of Instagram posts, and shared posts are
   // turned into notes saying which catalog entry they are.
   const shop = (await bizCategory(env.DB, biz)) === "shop";
   let conv: Record<string, unknown>[];
   if (shop) {
-    const { history: noted, products } = await notePosts(env, biz, history);
+    const { history: noted, products } = await notePosts(env, biz, history, !!image);
     conv = [{ role: "system", content: shopInstructions(await getSettings(env.DB, biz), products) }, ...noted];
+    if (image) {
+      // the client's photo, then the catalog's own photos to compare it with (small, «low» detail: ~85 tokens each)
+      const last = conv.pop() as { role: string; content: string };
+      const parts: Record<string, unknown>[] = [{ type: "text", text: last.content }, { type: "image_url", image_url: { url: image, detail: "low" } }];
+      const { results: photos } = await env.DB.prepare("SELECT id, photo FROM products WHERE business_id = ? AND active = 1 AND photo IS NOT NULL ORDER BY id DESC LIMIT 12").bind(biz).all<{ id: number; photo: string }>();
+      if (photos.length) {
+        parts.push({ type: "text", text: "Photos of catalog entries, to compare with the client's photo:" });
+        for (const p of photos) parts.push({ type: "text", text: `#${p.id}:` }, { type: "image_url", image_url: { url: p.photo, detail: "low" } });
+      }
+      conv.push({ role: "user", content: parts });
+    }
   } else {
     conv = [{ role: "system", content: await assistantInstructions(env, { biz, name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
     // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
@@ -1097,11 +1111,11 @@ const POST_MARK = /\[post (\S*)(?: «([^»]*)»)?\]/g;
 const sameCaption = (a: string | null, b: string) => !!a && !!b.trim() && a.trim().slice(0, 80) === b.trim().slice(0, 80);
 
 /** Client messages with a note on which catalog post they shared or linked to. */
-async function notePosts(env: Env, biz: number, history: { role: "user" | "assistant"; content: string }[]) {
+async function notePosts(env: Env, biz: number, history: { role: "user" | "assistant"; content: string }[], lastHasImage = false) {
   let products = await getProducts(env.DB, biz, true);
   let relinked = false;
   const out: typeof history = [];
-  for (const m of history) {
+  for (const [i, m] of history.entries()) {
     if (m.role !== "user") { out.push(m); continue; }
     const notes: string[] = [];
     for (const [, code] of m.content.matchAll(POST_LINK)) {
@@ -1118,33 +1132,39 @@ async function notePosts(env: Env, biz: number, history: { role: "user" | "assis
       p ??= products.find((x) => sameCaption(x.caption, caption));
       notes.push(p ? `(The client shared catalog post #${p.id}.)` : `(The client shared an Instagram post that isn't in the catalog${caption ? `; its caption: «${caption}»` : ""}.)`);
     }
-    if (m.content.includes("[photo]")) notes.push("(The client sent a photo or a screenshot; you can't see images.)");
+    if (m.content.includes("[photo]")) notes.push(i === history.length - 1 && lastHasImage ? "(The client sent the attached photo or screenshot.)" : "(Earlier the client sent a photo; it isn't attached any more — rely on what you answered then.)");
     const text = m.content.replace(POST_MARK, "").replaceAll("[photo]", "").trim();
     out.push({ role: "user", content: [text, ...notes].filter(Boolean).join("\n") });
   }
   return { history: out, products };
 }
 
-/** The shop assistant: answers about the items in the owner's posts, prices, delivery; takes an order for the manager. */
+/**
+ * The catalog assistant — shops, and businesses whose bookings a manager confirms (clinics, restaurants, travel):
+ * answers about the items or services the owner wrote, prices, delivery; takes an order or a request for the manager.
+ */
 function shopInstructions(settings: Settings, products: Product[]): string {
   const catalog = products.map((p) => `#${p.id}${p.post_url ? ` (${p.post_url})` : ""}:\n${p.description}`).join("\n\n");
   const { hoursText } = promptFacts(settings, []);
   const address = settings.address.trim(), delivery = settings.delivery?.trim();
+  const kind = settings.business_type?.trim() || "shop";
   return [
-    `Your name is Անի. You answer Instagram Direct and the website chat of the shop called exactly «${settings.shop_name}». Never change, translate or invent the shop's name.`,
+    `Your name is Անի. You answer Instagram Direct and the website chat of the ${kind} called exactly «${settings.shop_name}». Never change, translate or invent the business's name.`,
     settings.enabled ? "" : "The owner has switched you off for now: apologize briefly and say a manager will answer in this chat later. Nothing else.",
     "Clients often share one of the shop's Instagram posts — sometimes with no words, sometimes asking «how much?», «what sizes?». Such a message comes with a note in brackets saying which catalog post it is. Then answer about exactly that post: name every item in it with its price as written in the catalog (one short line per item if there are several), and add delivery or the address when it helps — like a good shop assistant, e.g. «Բարև Ձեզ 😊 Ջինսը՝ 25 000 դրամ, կոշիկները՝ 32 000 դրամ։ Առաքումն անվճար է։»",
-    "If the note says the post isn't in the catalog, or the client sent a photo, don't guess: say you couldn't find that item and ask them to share the post itself or write which item and colour; if it's still unclear, say a manager will answer in this chat.",
-    "Answer only from the catalog and the owner's information below. Never invent items, prices, sizes, colours, stock, discounts or delivery terms. When something isn't written there (a size, whether it's in stock), say you'll check with the manager, who will answer in this chat: «Կճշտեմ մենեջերի հետ, և նա կպատասխանի Ձեզ այստեղ։»",
-    "If the client wants to buy: ask, one thing at a time, what's still missing — the item (and the size or colour, if the catalog gives options), their name, their phone and the delivery address or pickup — then say the manager will confirm the order in this chat.",
+    "If the note says the post isn't in the catalog, don't guess: say you couldn't find that item and ask them to share the post itself or write which item and colour; if it's still unclear, say a manager will answer in this chat.",
+    "When the client sends a photo or screenshot of a thing: look at it, see what it is (kind of item, colour, style) and find the matching catalog entry — by the catalog photos if there are any, otherwise by the descriptions. If one entry clearly fits, answer with it and its price in a natural way («Սա մեր սև slim ջինսն է՝ 23 000 դրամ…»). If two or more could fit, name them with prices and ask which one. If the photo shows several things (a whole outfit), answer about the ones the catalog has — don't ask about things you don't sell. If nothing in the catalog fits, say honestly that you don't have this item and offer the closest thing you do have. Never invent an item or a price for what's in the photo.",
+    "Answer only from the catalog and the owner's information below. Never invent items, prices, sizes, colours, stock, discounts or delivery terms. Sizes and colours listed for an item are in stock (a size inside a listed range like 28–34 too), unless the owner wrote otherwise. When something isn't written there (a size, whether it's in stock), say you'll check with the manager, who will answer in this chat: «Կճշտեմ մենեջերի հետ, և նա կպատասխանի Ձեզ այստեղ։»",
+    "If the client wants to buy, order or book: ask, one thing at a time, only what's still missing for this kind of business — what exactly (the size or colour if the catalog gives options; the day, time and number of people for a visit, a table or a trip), their name and phone, and the delivery address if it's delivered — then say the manager will confirm it in this chat. Never say a time or a table is free or confirmed yourself: you don't see the schedule, the manager confirms. When the client asks for advice (a gift, which dish or tour to choose), ask one short question about their taste or budget and suggest one or two options from the catalog.",
+    "Who confirms: in a clinic, a salon or a restaurant say «ադմինիստրատորը» (the administrator); in a shop or a travel agency «մենեջերը» (the manager).",
     "Greet back briefly when the client greets you, and greet briefly in your first reply of a conversation; not in later replies.",
     "Answer in the language the client writes in: Armenian, Russian or English. In Armenian:",
     ...ARMENIAN_STYLE,
     "Tone: warm, friendly and short — 1–4 sentences. No markdown (no **, #, or bullet lists); plain separate lines are fine for several items. At most one emoji. Prices in digits: «25 000 դրամ».",
     `Today: ${localNow().date} (${weekdayName(localNow().date)}), Yerevan time. Opening hours: ${hoursText}.`,
     address ? `Shop address — when asked or when it helps: «${address}». Never invent another.` : "The address isn't filled in: never invent one; a manager can tell it.",
-    delivery ? `Delivery and payment (from the owner): ${delivery}` : "Delivery terms aren't filled in: never invent them; say a manager will tell.",
-    `Catalog — each entry is one Instagram post with what's in it; only these items and prices exist:\n${catalog || "(empty: the owner hasn't added items yet — say a manager will answer)"}`,
+    delivery ? `Delivery and payment (from the owner): ${delivery}` : "Delivery terms aren't filled in: if asked, never invent them; say a manager will tell.",
+    `Catalog — items, menu or services the owner wrote, an entry may be one Instagram post; only these exist, at these prices:\n${catalog || "(empty: the owner hasn't added anything yet — say a manager will answer)"}`,
     settings.extra_instructions ? `More information from the owner (facts about this shop; answer from them):\n${settings.extra_instructions}` : "",
   ].filter(Boolean).join("\n");
 }
@@ -1160,6 +1180,7 @@ function validSettings(input: Record<string, unknown>, current: Settings): Setti
   if ("greeting" in input) s.greeting = cleanText(input.greeting, 200) || current.greeting;
   if ("extra_instructions" in input) s.extra_instructions = cleanText(input.extra_instructions, 1500);
   if ("delivery" in input) s.delivery = cleanText(input.delivery, 600);
+  if ("business_type" in input) s.business_type = cleanText(input.business_type, 60);
   if ("barbers" in input) {
     const n = Number(input.barbers);
     if (!Number.isInteger(n) || n < 1 || n > 20) throw new HttpError(400, "barbers must be 1–20");
@@ -1530,10 +1551,12 @@ async function instagramReply(env: Env, igUserId: string, senderId: string, mid:
   if (attachments.length) await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text) VALUES (?, ?, ?, 'event', ?)")
     .bind(account.business_id, `chat-${chatId}`, history.length, `instagram attachments: ${JSON.stringify(attachments).slice(0, 1500)}`).run();
   // shops read shared posts; a barbershop only answers words
-  const content = (await bizCategory(env.DB, account.business_id)) === "shop" ? withAttachments(text, attachments) : cleanText(text, 1000);
+  const shop = (await bizCategory(env.DB, account.business_id)) === "shop";
+  const content = shop ? withAttachments(text, attachments) : cleanText(text, 1000);
   if (!content) return;
   history.push({ role: "user", content });
-  const out = await chatTurn(env, account.business_id, chatId, history);
+  const image = shop ? attachments.find((a) => a.type === "image" && a.payload?.url)?.payload?.url : undefined;
+  const out = await chatTurn(env, account.business_id, chatId, history, CHAT_MODEL, image);
   const reply = "error" in out ? "Ներողություն, հիմա չեմ կարողանում պատասխանել։ Փորձեք մի փոքր ուշ։" : out.reply;
   if (!reply) return; // nothing to say (e.g. a like after the goodbye)
   // The stored token is the business's system user: it sends through the Facebook Page linked to the
@@ -1769,6 +1792,8 @@ export default {
           greeting: settings.greeting,
           extra_instructions: settings.extra_instructions,
           category: await bizCategory(env.DB, biz),
+          // the landing page shows a shop's catalog instead of a price list
+          catalog: (await bizCategory(env.DB, biz)) === "shop" ? (await getProducts(env.DB, biz, true)).map((p) => p.description) : [],
           services: services.map(({ id, category, name_hy, name_en, duration_min, price_min, price_max }) => ({ id, category, name_hy, name_en, duration_min, price_min, price_max })),
           services_text: servicesText,
           hours_text: hoursText,

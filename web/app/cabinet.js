@@ -47,6 +47,7 @@ const T = {
     "pr.edit": "Изменить", "pr.delAsk": "Удалить этот товар?", "pr.empty": "Товаров пока нет", "pr.emptyHint": "Добавьте первый пост: ссылку и что в нём продаётся.",
     "pr.linked": "Пост найден в Instagram", "pr.waiting": "Подключите Instagram — и ассистент узнает этот пост в Direct", "pr.notFound": "Пост не найден в вашем Instagram — проверьте ссылку", "pr.noLink": "Без ссылки", "pr.hidden": "скрыт",
     "err.bad_post_url": "Это не ссылка на пост Instagram. Пример: https://www.instagram.com/p/ABC123/", "err.description_required": "Опишите, что в посте и сколько стоит.", "err.bad_photo": "Не удалось загрузить фото. Попробуйте другое.", "err.too_many_products": "Достигнут лимит: 300 товаров.",
+    "set.kind": "Тип бизнеса", "kind.clothes": "Одежда и обувь", "kind.perfume": "Парфюмерия и косметика", "kind.shop": "Другой магазин", "kind.dental": "Стоматология или клиника", "kind.restaurant": "Ресторан, кафе или доставка еды", "kind.travel": "Турагентство", "kind.service": "Услуги",
     "set.delivery": "Доставка и оплата", "set.deliveryHint": "Ассистент скажет это клиенту, когда нужно.", "set.deliveryPh": "Доставка по Еревану бесплатно, 1–2 дня. Оплата наличными или картой при получении.",
     "ig.off.shop": "Подключите Instagram — ассистент будет отвечать клиентам в Direct по вашим товарам и ценам.",
     "test.sub.shop": "Он знает ваши товары, цены и доставку. Напишите как клиент или вставьте ссылку на пост — так же, как клиент перешлёт его в Direct.",
@@ -104,6 +105,7 @@ const T = {
     "pr.edit": "Փոփոխել", "pr.delAsk": "Ջնջե՞լ այս ապրանքը", "pr.empty": "Ապրանքներ դեռ չկան", "pr.emptyHint": "Ավելացրեք առաջին գրառումը՝ հղումը և թե ինչ է վաճառվում դրանում։",
     "pr.linked": "Գրառումը գտնվել է Instagram-ում", "pr.waiting": "Միացրեք Instagram-ը, և օգնականը կճանաչի այս գրառումը Direct-ում", "pr.notFound": "Գրառումը Ձեր Instagram-ում չգտնվեց. ստուգեք հղումը", "pr.noLink": "Առանց հղման", "pr.hidden": "թաքցված",
     "err.bad_post_url": "Սա Instagram-ի գրառման հղում չէ։ Օրինակ՝ https://www.instagram.com/p/ABC123/", "err.description_required": "Գրեք, թե ինչ կա գրառման մեջ և ինչ արժե։", "err.bad_photo": "Չհաջողվեց վերբեռնել լուսանկարը։ Փորձեք այլ լուսանկար։", "err.too_many_products": "Սահմանաչափը 300 ապրանք է։",
+    "set.kind": "Բիզնեսի տեսակը", "kind.clothes": "Հագուստ և կոշիկ", "kind.perfume": "Օծանելիք և կոսմետիկա", "kind.shop": "Այլ խանութ", "kind.dental": "Ատամնաբուժություն կամ կլինիկա", "kind.restaurant": "Ռեստորան, սրճարան կամ սննդի առաքում", "kind.travel": "Տուրիստական գործակալություն", "kind.service": "Ծառայություններ",
     "set.delivery": "Առաքում և վճարում", "set.deliveryHint": "Օգնականը դա կասի հաճախորդին, երբ անհրաժեշտ լինի։", "set.deliveryPh": "Երևանում առաքումն անվճար է, 1–2 օրում։ Վճարումը՝ կանխիկ կամ քարտով՝ ստանալիս։",
     "ig.off.shop": "Միացրեք Instagram-ը, և օգնականը Direct-ում կպատասխանի հաճախորդներին Ձեր ապրանքների և գների մասին։",
     "test.sub.shop": "Նա գիտի Ձեր ապրանքները, գներն ու առաքման պայմանները։ Գրեք որպես հաճախորդ կամ տեղադրեք գրառման հղումը, ինչպես հաճախորդը կուղարկի այն Direct-ում։",
@@ -592,6 +594,7 @@ function renderSettings() {
   const f = $("setForm"), s = state.settings;
   f.enabled.checked = s.enabled;
   for (const k of ["shop_name", "shop_name_spoken", "address", "barbers", "extra_instructions", "delivery"]) f[k].value = s[k] ?? "";
+  f.business_type.value = s.business_type || "clothing store";
   const order = [1, 2, 3, 4, 5, 6, 0];
   $("hours").replaceChildren(...order.map((wd) => {
     const h = s.hours[wd];
@@ -615,7 +618,7 @@ $("setForm").addEventListener("submit", async (e) => {
   try {
     await api("/api/app/settings", {
       enabled: f.enabled.checked, shop_name: f.shop_name.value, shop_name_spoken: f.shop_name_spoken.value, address: f.address.value,
-      barbers: Number(f.barbers.value), extra_instructions: f.extra_instructions.value, delivery: f.delivery.value, hours,
+      barbers: Number(f.barbers.value), extra_instructions: f.extra_instructions.value, delivery: f.delivery.value, ...(me.category === "shop" ? { business_type: f.business_type.value } : {}), hours,
     }, "PUT");
     await reload();
     msg.textContent = t("set.saved");

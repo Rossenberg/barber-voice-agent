@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>UMNIK — ИИ-администратор, который отвечает каждому клиенту</title>
-  <meta name="description" content="UMNIK отвечает клиентам в Instagram Direct и в чате на сайте на армянском, русском и английском, называет цены и сам записывает в ваш календарь — 24/7. Для барбершопов, салонов, клиник, офисов и доставки.">
+  <meta name="description" content="UMNIK отвечает клиентам в Instagram Direct и в чате на сайте на армянском, русском и английском, называет цены, записывает клиентов и принимает заказы — 24/7. Для барбершопов, магазинов, клиник, ресторанов и турагентств.">
   <meta name="theme-color" content="#ffffff">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%23059669'/%3E%3Cpath d='M9 19v-6m4.7 9V10m4.6 12V10M23 19v-6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,7 +44,7 @@
         <div class="hero-copy">
           <span class="eyebrow"><span class="live-dot"></span><span data-i18n="hero.eyebrow">ИИ-администратор для бизнеса</span></span>
           <h1 data-i18n-html="hero.title">Ваши руки заняты. <em>UMNIK</em> отвечает каждому клиенту.</h1>
-          <p class="lead" data-i18n="hero.sub">Отвечает в Instagram Direct и в чате на сайте на армянском, русском и английском, называет цены и сам записывает в ваш календарь — днём, ночью и в выходные.</p>
+          <p class="lead" data-i18n="hero.sub">Отвечает в Instagram Direct и в чате на сайте на армянском, русском и английском: называет цены, записывает клиентов и принимает заказы — днём, ночью и в выходные.</p>
           <div class="hero-actions">
             <button class="btn btn-primary btn-lg" data-start>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg>
@@ -66,18 +66,20 @@
             <div class="pc-head">
               <span class="pc-av">U</span>
               <span class="pc-who"><b>UMNIK</b><small data-i18n="scene.status">отвечает в Direct</small></span>
+              <span class="pc-ind" id="sceneInd"></span>
             </div>
             <div class="pc-body" id="sceneBody"></div>
+            <div class="pc-dots" id="sceneDots"></div>
           </div>
           <div class="booking-chip" id="sceneChip">
-            <span class="bc-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+            <span class="bc-check" id="sceneIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
             <span><b data-i18n="scene.booked">Записан в календарь</b><small id="sceneChipText"></small></span>
           </div>
           <div class="mini-cal">
-            <div class="mc-head"><span data-i18n="scene.tomorrow">Завтра</span><span class="mc-dots"><i></i><i></i><i></i></span></div>
-            <div class="mc-row"><span>10:00</span><i class="busy"></i></div>
-            <div class="mc-row"><span>11:00</span><i class="slot" id="sceneSlot"></i></div>
-            <div class="mc-row"><span>12:00</span><i class="busy short"></i></div>
+            <div class="mc-head"><span id="sceneDay"></span><span class="mc-dots"><i></i><i></i><i></i></span></div>
+            <div class="mc-row"><span data-time></span><i class="busy"></i></div>
+            <div class="mc-row"><span data-time></span><i class="slot" id="sceneSlot"></i></div>
+            <div class="mc-row"><span data-time></span><i class="busy short"></i></div>
           </div>
         </div>
       </div>
@@ -107,7 +109,7 @@
             <input type="range" id="rCheck" min="2000" max="100000" step="1000" value="10000">
           </label>
           <label class="range">
-            <span><span data-i18n="calc.rate">Из них записались бы</span><b id="vRate">50%</b></span>
+            <span><span data-i18n="calc.rate">Из них стали бы клиентами</span><b id="vRate">50%</b></span>
             <input type="range" id="rRate" min="10" max="90" step="5" value="50">
           </label>
           <div class="calc-out">
@@ -126,7 +128,7 @@
         <div class="head reveal">
           <span class="kicker" data-i18n="ind.kicker">Для кого</span>
           <h2 class="h2" data-i18n="ind.title">Один UMNIK — любой бизнес, где пишут клиенты</h2>
-          <p class="sub" data-i18n="ind.sub">Вы выбираете сферу, добавляете свои услуги и цены — и ассистент говорит именно о вашем бизнесе.</p>
+          <p class="sub" data-i18n="ind.sub">Вы выбираете сферу, добавляете свои услуги, товары и цены — и ассистент говорит именно о вашем бизнесе.</p>
         </div>
         <div class="industries">
           <article class="ind reveal">
@@ -147,13 +149,26 @@
           <article class="ind reveal">
             <div class="scene-ico" aria-hidden="true">
               <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
+                <path d="M19 25h26l-2.5 22h-21z" class="si-solid"/>
+                <path d="M26 25v-3a6 6 0 0 1 12 0v3" class="si-line"/>
+                <g class="price-tag"><path d="M41 31h9l3 3.5-3 3.5h-9z" class="si-accent"/><circle cx="44" cy="34.5" r="1.3" class="si-dot"/></g>
+              </svg>
+            </div>
+            <span class="badge live" data-i18n="ind.live">Работает</span>
+            <h3 data-i18n="ind.shop.t">Магазины одежды, обуви и парфюмерии</h3>
+            <p data-i18n="ind.shop.d">Отвечает на пересланные посты из Instagram: цена, размеры, наличие, доставка. Принимает заказ для менеджера.</p>
+            <q data-i18n="ind.shop.q">«Сколько стоят эти джинсы?»</q>
+          </article>
+          <article class="ind reveal">
+            <div class="scene-ico" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" class="si-bg"/>
                 <path d="M22 18c4-3 7 0 10 0s6-3 10 0c4 3 2 10 1 14-1 5-2 14-6 14-3 0-2-9-5-9s-2 9-5 9c-4 0-5-9-6-14-1-4-3-11 1-14z" class="si-solid"/>
                 <path class="spark" d="M47 14v6M44 17h6"/><path class="spark s2" d="M16 22v4M14 24h4"/>
               </svg>
             </div>
-            <span class="badge" data-i18n="ind.soon">Скоро</span>
+            <span class="badge live" data-i18n="ind.live">Работает</span>
             <h3 data-i18n="ind.dental.t">Стоматологии и клиники</h3>
-            <p data-i18n="ind.dental.d">Запись к врачу, первичная консультация, напоминание о визите.</p>
+            <p data-i18n="ind.dental.d">Цены на лечение, запись к врачу, срочный приём — администратор только подтверждает.</p>
             <q data-i18n="ind.dental.q">«Зуб болит, можно сегодня к врачу?»</q>
           </article>
           <article class="ind reveal">
@@ -165,10 +180,10 @@
                 <rect class="cal-cell c4" x="21" y="40" width="7" height="5" rx="2"/>
               </svg>
             </div>
-            <span class="badge" data-i18n="ind.soon">Скоро</span>
-            <h3 data-i18n="ind.office.t">Офисы и сервисы</h3>
-            <p data-i18n="ind.office.d">Консультации, встречи, юристы, нотариусы, автосервисы — запись по вашему расписанию.</p>
-            <q data-i18n="ind.office.q">«Можно на консультацию в четверг?»</q>
+            <span class="badge live" data-i18n="ind.live">Работает</span>
+            <h3 data-i18n="ind.office.t">Турагентства и услуги</h3>
+            <p data-i18n="ind.office.d">Туры, консультации, автосервисы — отвечает про цены и собирает заявки для менеджера.</p>
+            <q data-i18n="ind.office.q">«Сколько стоит тур в Тбилиси на двоих?»</q>
           </article>
           <article class="ind reveal">
             <div class="scene-ico" aria-hidden="true">
@@ -179,10 +194,10 @@
                 <path class="steam st1" d="M26 20c-2-3 2-4 0-7"/><path class="steam st2" d="M33 19c-2-3 2-4 0-7"/><path class="steam st3" d="M40 20c-2-3 2-4 0-7"/>
               </svg>
             </div>
-            <span class="badge" data-i18n="ind.soon">Скоро</span>
-            <h3 data-i18n="ind.food.t">Фастфуд и доставка</h3>
-            <p data-i18n="ind.food.d">Принимает заказы в переписке, отвечает про меню, адреса и время работы.</p>
-            <q data-i18n="ind.food.q">«Две шаурмы и колу, на Комитаса»</q>
+            <span class="badge live" data-i18n="ind.live">Работает</span>
+            <h3 data-i18n="ind.food.t">Рестораны, кафе и доставка</h3>
+            <p data-i18n="ind.food.d">Меню и цены, бронь столиков, заказы на доставку прямо в переписке.</p>
+            <q data-i18n="ind.food.q">«Столик на четверых в субботу в 20:00»</q>
           </article>
           <article class="ind ind-more reveal">
             <div class="scene-ico" aria-hidden="true">
@@ -192,7 +207,7 @@
               </svg>
             </div>
             <h3 data-i18n="ind.more.t">Ваш бизнес</h3>
-            <p data-i18n="ind.more.d">Фитнес, автомойки, отели, курсы. Если клиенты пишут — UMNIK поможет.</p>
+            <p data-i18n="ind.more.d">Фитнес, автомойки, отели, курсы, салоны красоты. Если клиенты пишут — UMNIK поможет.</p>
             <button class="link-arrow" data-lead data-i18n="ind.more.cta">Обсудить подключение →</button>
           </article>
         </div>
@@ -205,23 +220,24 @@
         <div class="demo-copy reveal">
           <span class="kicker" data-i18n="demo.kicker">Живое демо</span>
           <h2 class="h2" data-i18n="demo.title">Напишите UMNIK прямо сейчас</h2>
-          <p class="sub" data-i18n="demo.sub">Это настоящий ассистент демо-барбершопа «Blade Barbershop». Напишите — спросите цену, свободное время, запишитесь, перенесите запись. Так же он отвечает в Instagram Direct.</p>
+          <p class="sub" data-i18n="demo.sub">Выберите сферу и напишите как клиент. Это настоящие ассистенты демо-бизнесов: спросите цену или наличие, запишитесь, забронируйте столик, оформите заказ. Так же они отвечают в Instagram Direct.</p>
           <ul class="checks">
             <li data-i18n="demo.c1">Понимает разговорный армянский (и латиницей), русский и английский</li>
-            <li data-i18n="demo.c2">Смотрит реальный календарь и записывает</li>
+            <li data-i18n="demo.c2">Записывает в календарь или передаёт заказ менеджеру</li>
             <li data-i18n="demo.c3">Отвечает за пару секунд</li>
           </ul>
           <details class="prices-box">
-            <summary data-i18n="prices.title">Прайс демо-барбершопа</summary>
-            <p class="prices-hint" data-i18n="prices.sub">Эти цены ассистент берёт из личного кабинета. У каждого бизнеса — свои.</p>
+            <summary data-i18n="prices.title">Прайс этого демо</summary>
+            <p class="prices-hint" data-i18n="prices.sub">Ассистент берёт цены и описания из личного кабинета. У каждого бизнеса — свои.</p>
             <div class="prices" id="priceList"></div>
           </details>
         </div>
 
         <div class="demo reveal" id="assistant">
+          <div class="demo-pick" id="demoPick" role="tablist" data-i18n-aria="demo.pick" aria-label="Выберите сферу"></div>
           <div class="demo-head">
             <div class="demo-shop">
-              <span class="demo-av">B</span>
+              <span class="demo-av" id="demoAv">B</span>
               <span><b id="shopName">Blade Barbershop</b><small><span class="pill-dot" id="pillDot"></span><span id="pillText" data-i18n="pill.on">Ассистент включён</span></small></span>
             </div>
             <span class="status" id="status" data-state="idle" data-i18n="status.ready">Готов</span>
@@ -229,12 +245,9 @@
 
           <div class="chat" id="chatPane">
             <div class="transcript chat-log" id="chatLog" aria-live="polite"></div>
-            <div class="chips chat-chips" id="chatChips">
-              <button class="chip" type="button" data-i18n="chip.1">Сколько стоит оформление бороды?</button>
-              <button class="chip" type="button" data-i18n="chip.2">Есть место завтра утром?</button>
-              <button class="chip" type="button" data-i18n="chip.3">Можно завтра в 6 на фейд?</button>
-            </div>
+            <div class="chips chat-chips" id="chatChips"></div>
             <form class="chat-form" id="chatForm">
+              <label class="chat-photo" id="chatPhoto" hidden data-i18n-title="chat.photo" title="Отправить фото"><input type="file" accept="image/*" id="chatFile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="4"/><circle cx="12" cy="12.5" r="3.5"/><path d="M8.5 5l1.2-2h4.6l1.2 2"/></svg></label>
               <input class="input" id="chatInput" autocomplete="off" maxlength="500" data-i18n-placeholder="chat.placeholder" placeholder="Напишите сообщение…">
               <button class="btn btn-primary chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
             </form>
@@ -264,23 +277,23 @@
             <div class="feat-art cal" aria-hidden="true">
               <i></i><i></i><i class="on"></i><i></i><i class="move"></i><i></i><i></i><i class="x"></i>
             </div>
-            <h3 data-i18n="f2.t">Записывает, переносит, отменяет</h3>
-            <p data-i18n="f2.d">Сам проверяет календарь, предлагает свободное время и не допускает двойных записей.</p>
+            <h3 data-i18n="f2.t">Записывает и принимает заказы</h3>
+            <p data-i18n="f2.d">Салону — свободное время по календарю без двойных записей. Магазину, ресторану, клинике — заказ или заявка с именем и телефоном для менеджера.</p>
           </article>
           <article class="feat reveal">
-            <div class="feat-art group" aria-hidden="true"><span>А</span><span>Д</span><span class="plus">+1</span></div>
-            <h3 data-i18n="f3.t">Группы и друзья</h3>
-            <p data-i18n="f3.d">«Я и друг», «друг не придёт», «вместо друга придёт брат» — разбирается в каждом случае.</p>
+            <div class="feat-art post" aria-hidden="true"><span class="fp-card"><i class="fp-img"></i><i class="fp-ln"></i><i class="fp-ln short"></i></span><span class="fp-tag">25 000 ֏</span></div>
+            <h3 data-i18n="f3.t">Понимает пересланные посты</h3>
+            <p data-i18n="f3.d">Клиент пересылает пост из вашего Instagram и спрашивает «сколько?» — UMNIK узнаёт товар и называет цену.</p>
           </article>
           <article class="feat reveal">
             <div class="feat-art price" aria-hidden="true"><span class="pr-row"><i></i><b>10 000 ֏</b></span><span class="pr-row"><i></i><b>6 000 ֏</b></span><span class="pr-row hl"><i></i><b>16 000 ֏</b></span></div>
-            <h3 data-i18n="f4.t">Ваши услуги и цены</h3>
+            <h3 data-i18n="f4.t">Ваши услуги, товары и цены</h3>
             <p data-i18n="f4.d">Ассистент говорит только то, что вы записали в кабинете. Поменяли цену — он уже знает.</p>
           </article>
           <article class="feat reveal">
             <div class="feat-art channels" aria-hidden="true"><span class="ch ig"></span><span class="ch-link"></span><span class="ch brain">U</span><span class="ch-link"></span><span class="ch chat"></span></div>
             <h3 data-i18n="f5.t">Instagram и сайт — один мозг</h3>
-            <p data-i18n="f5.d">Одинаково отвечает в Instagram Direct и в чате на сайте, записи попадают в один календарь.</p>
+            <p data-i18n="f5.d">Одинаково отвечает в Instagram Direct и в чате на сайте, записи и заказы — в одном кабинете.</p>
           </article>
           <article class="feat reveal">
             <div class="feat-art qa" aria-hidden="true"><span class="qa-shield"></span><span class="qa-tick"></span></div>
@@ -296,12 +309,12 @@
       <div class="wrap">
         <div class="head reveal">
           <span class="kicker" data-i18n="how.kicker">Подключение</span>
-          <h2 class="h2" data-i18n="how.title">Три шага до первой записи</h2>
+          <h2 class="h2" data-i18n="how.title">Три шага до первого клиента</h2>
         </div>
         <ol class="steps">
-          <li class="step reveal"><span class="step-n">1</span><h3 data-i18n="how.1.t">Регистрируетесь</h3><p data-i18n="how.1.d">Выбираете сферу бизнеса — барбершоп, клиника, офис или другую.</p></li>
-          <li class="step reveal"><span class="step-n">2</span><h3 data-i18n="how.2.t">Добавляете услуги и часы</h3><p data-i18n="how.2.d">Цены, длительность, график работы и мастеров — в личном кабинете.</p></li>
-          <li class="step reveal"><span class="step-n">3</span><h3 data-i18n="how.3.t">Подключаете Instagram</h3><p data-i18n="how.3.d">Одной кнопкой в кабинете. UMNIK отвечает в Direct, записи появляются в вашем календаре.</p></li>
+          <li class="step reveal"><span class="step-n">1</span><h3 data-i18n="how.1.t">Регистрируетесь</h3><p data-i18n="how.1.d">Выбираете сферу бизнеса — барбершоп, магазин, клиника, ресторан или другую.</p></li>
+          <li class="step reveal"><span class="step-n">2</span><h3 data-i18n="how.2.t">Добавляете услуги или товары</h3><p data-i18n="how.2.d">Цены, часы работы, доставку, ссылки на посты — в личном кабинете.</p></li>
+          <li class="step reveal"><span class="step-n">3</span><h3 data-i18n="how.3.t">Подключаете Instagram</h3><p data-i18n="how.3.d">Одной кнопкой в кабинете. UMNIK отвечает в Direct, а записи и заказы видны вам.</p></li>
         </ol>
       </div>
     </section>
@@ -311,12 +324,12 @@
       <div class="wrap cab-grid">
         <div class="reveal">
           <span class="kicker" data-i18n="cab.kicker">Личный кабинет</span>
-          <h2 class="h2" data-i18n="cab.title">Все записи — в одном календаре</h2>
-          <p class="sub" data-i18n="cab.sub">Видите, кто записался и на что. Закрываете часы, когда заняты. Меняете услуги и цены — ассистент сразу говорит по-новому.</p>
+          <h2 class="h2" data-i18n="cab.title">Всё под контролем — в одном кабинете</h2>
+          <p class="sub" data-i18n="cab.sub">Записи в календаре, товары из постов, цены и часы работы. Меняете что-то — ассистент сразу говорит по-новому.</p>
           <ul class="checks">
-            <li data-i18n="cab.c1">Календарь записей по дням</li>
+            <li data-i18n="cab.c1">Календарь записей — для салонов и клиник</li>
             <li data-i18n="cab.c2">Закрыть часы или выходной в один клик</li>
-            <li data-i18n="cab.c3">Свои услуги, цены и длительность</li>
+            <li data-i18n="cab.c3">Свои услуги, товары и цены</li>
             <li data-i18n="cab.c4">Включить или выключить ассистента</li>
           </ul>
         </div>
@@ -346,10 +359,10 @@
           <h2 class="h2" data-i18n="faq.title">Частые вопросы</h2>
         </div>
         <div class="faq reveal">
-          <details><summary data-i18n="faq.1.q">Клиенты поймут, что им пишет робот?</summary><p data-i18n="faq.1.a">Ответы короткие и живые, как у хорошего администратора. Если клиент прямо спросит — UMNIK честно скажет, что он ИИ-помощник, и продолжит запись.</p></details>
+          <details><summary data-i18n="faq.1.q">Клиенты поймут, что им пишет робот?</summary><p data-i18n="faq.1.a">Ответы короткие и живые, как у хорошего администратора. Если клиент прямо спросит — UMNIK честно скажет, что он ИИ-помощник, и продолжит разговор.</p></details>
           <details><summary data-i18n="faq.2.q">Что, если вопрос сложный?</summary><p data-i18n="faq.2.a">UMNIK не придумывает ответы. Если информации нет, он вежливо предложит связаться с администратором и передаст вам вопрос.</p></details>
           <details><summary data-i18n="faq.3.q">Как подключить мой Instagram?</summary><p data-i18n="faq.3.a">В кабинете кнопкой «Подключить Instagram»: входите через Facebook, и UMNIK начинает отвечать в Direct. Нужен профессиональный аккаунт, привязанный к странице Facebook.</p></details>
-          <details><summary data-i18n="faq.4.q">Каждый бизнес получает своего ассистента?</summary><p data-i18n="faq.4.a">Да. У каждого бизнеса свои услуги, цены, часы и календарь. В вашем Instagram UMNIK отвечает только о вашем бизнесе.</p></details>
+          <details><summary data-i18n="faq.4.q">Каждый бизнес получает своего ассистента?</summary><p data-i18n="faq.4.a">Да. У каждого бизнеса свои услуги или товары, цены, часы работы и кабинет. В вашем Instagram UMNIK отвечает только о вашем бизнесе.</p></details>
           <details><summary data-i18n="faq.5.q">Сколько стоит?</summary><p data-i18n="faq.5.a">Зависит от количества сообщений. Оставьте заявку — подберём тариф и дадим попробовать на ваших клиентах.</p></details>
           <details><summary data-i18n="faq.6.q">На каких языках пишет?</summary><p data-i18n="faq.6.a">На армянском, русском и английском. Понимает разговорный язык, сленг и армянский латиницей. Отвечает на том языке, на котором пишет клиент.</p></details>
         </div>
@@ -393,15 +406,16 @@
     <form class="lead-form" id="leadForm" novalidate>
       <button class="lead-close" type="button" id="leadClose" aria-label="Close">×</button>
       <h2 id="leadTitle" data-i18n="lead.title">Подключить UMNIK</h2>
-      <p class="lead-sub" data-i18n="lead.sub">Оставьте контакт — свяжемся в течение дня, настроим ассистента под ваш бизнес.</p>
+      <p class="lead-sub" data-i18n="lead.sub">Оставьте контакт — свяжемся в течение дня и настроим ассистента под ваш бизнес.</p>
       <label class="field"><span data-i18n="lead.name">Ваше имя</span><input class="input" name="name" autocomplete="name" required maxlength="80"></label>
       <label class="field"><span data-i18n="lead.phone">Телефон или Telegram</span><input class="input" name="contact" autocomplete="tel" required maxlength="80" placeholder="+374 …"></label>
       <label class="field"><span data-i18n="lead.industry">Сфера</span>
         <select class="input" name="industry">
           <option value="barber" data-i18n="ind.barber.t">Барбершопы и салоны</option>
+          <option value="shop" data-i18n="ind.shop.t">Магазины одежды, обуви и парфюмерии</option>
           <option value="dental" data-i18n="ind.dental.t">Стоматологии и клиники</option>
-                    <option value="office" data-i18n="ind.office.t">Офисы и сервисы</option>
-          <option value="food" data-i18n="ind.food.t">Фастфуд и доставка</option>
+                    <option value="office" data-i18n="ind.office.t">Турагентства и услуги</option>
+          <option value="food" data-i18n="ind.food.t">Рестораны, кафе и доставка</option>
           <option value="other" data-i18n="lead.other">Другое</option>
         </select>
       </label>
