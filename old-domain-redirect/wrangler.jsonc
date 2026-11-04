@@ -1,0 +1,7 @@
+{
+  // the old worker name: deploying this replaces the old site with a redirect to the new one
+  "name": "barber-voice-agent",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true
+}
