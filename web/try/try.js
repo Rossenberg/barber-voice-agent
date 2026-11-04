@@ -1,12 +1,12 @@
 // Test page for one business's assistant (/try/?biz=<slug>): the same chat as the landing demo and Instagram Direct.
 const T = {
   ru: {
-    back: "← В кабинет", hint: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.",
+    back: "← В кабинет", hint: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Запись появится в вашем календаре.", hintShop: "Так ассистент отвечает вашим клиентам в чате и в Instagram Direct. Вставьте ссылку на пост — как будто клиент переслал его.",
     notFound: "Бизнес не найден", on: "Ассистент включён", off: "Ассистент выключен", ready: "Готов", offState: "Выключен", disabled: "Ассистент выключен в кабинете.",
     placeholder: "Напишите сообщение…", greet: "Здравствуйте! Это {shop}, я Ани. Чем могу помочь?", chatError: "Не удалось ответить, попробуйте ещё раз.", booked: "Записано ✓",
   },
   hy: {
-    back: "← Վերադառնալ էջ", hint: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Գրանցումը կհայտնվի Ձեր օրացույցում։",
+    back: "← Վերադառնալ էջ", hint: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Գրանցումը կհայտնվի Ձեր օրացույցում։", hintShop: "Այսպես է օգնականը պատասխանում Ձեր հաճախորդներին չատում և Instagram Direct-ում։ Տեղադրեք գրառման հղումը, ասես հաճախորդն է այն ուղարկել։",
     notFound: "Բիզնեսը չի գտնվել", on: "Օգնականը միացված է", off: "Օգնականն անջատված է", ready: "Պատրաստ է", offState: "Անջատված է", disabled: "Օգնականն անջատված է էջում։",
     placeholder: "Գրեք հաղորդագրություն…", chatError: "Չհաջողվեց պատասխանել, փորձեք կրկին։", booked: "Գրանցված է ✓",
   },
@@ -37,6 +37,7 @@ async function load() {
   config = await res.json();
   $("assistant").hidden = false;
   $("shopName").textContent = config.shop_name;
+  if (config.category === "shop") document.querySelector('[data-i18n="hint"]').textContent = t("hintShop");
   $("av").textContent = config.shop_name.trim()[0]?.toUpperCase() ?? "U";
   $("pillDot").classList.toggle("off", !config.enabled);
   $("pillText").textContent = t(config.enabled ? "on" : "off");

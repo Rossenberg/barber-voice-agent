@@ -50,6 +50,7 @@ interface Settings {
   barbers: number; // how many clients can be served at the same time
   hours: ([number, number] | null)[]; // index 0 = Sunday; minutes since midnight; null = closed
   extra_instructions: string;
+  delivery?: string; // shops: delivery and payment terms
 }
 
 interface Service {
@@ -756,6 +757,11 @@ const REALTIME_TOOLS = [
   },
 ];
 
+const ARMENIAN_STYLE = [
+    "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
+    "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
+];
+
 /**
  * Instructions shared by the voice assistant (/realtime/) and the website chat, so both think the same way:
  * same phrasebook, calendar rules and price list; only how they talk differs (spoken words vs. chat text).
@@ -789,8 +795,7 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
       : "The address isn't filled in: if asked, «Հասցեի մասին ճշգրիտ տեղեկություն չունեմ։ Ցանկանո՞ւմ եք, որ ադմինիստրատորը Ձեզ հետ կապվի։» Never invent one.",
     voice ? "The page has already greeted the caller, so don't greet again; answer what they say." : "The chat already showed your greeting. If the client greets you («barev», «բարև», «привет»), greet them back warmly in a few words before going on («Բարև ձեզ 😊 Ուրախ եմ, որ գրեցիք։ …») — never jump straight to «Ինչո՞վ կարող եմ օգնել» as if they hadn't said hello.",
     "Say «բարբեր» (բարբերը, բարբերներ, մեր բարբերները) for the people who cut hair — never «վարսավիր». The shop is «բարբերշոփ» or «սրահ», never «վարսավիրանոց».",
-    "Speak correct, polite, natural Eastern Armenian, like a well-spoken administrator: warm but literate. Always address the caller with the polite «Դուք» (Ձեզ, Ձեր), never «դու», even if the caller speaks informally. Use standard forms («է», «կարող եմ», «վաղը»), not slang («ա», «կարամ», «էգուց», «ախպեր ջան», «ապեր»). Switch to Russian or English only if the caller speaks it.",
-    "Use only real Armenian words. Never write English or Russian words in Armenian letters: no «պերֆեկտ», «օքեյ», «սուպեր», «գրեյթ», «նայս», «օկ». Instead say «Շատ լավ», «Հիանալի», «Եղավ», «Լավ», «Իհարկե», «Հա».",
+    ...ARMENIAN_STYLE,
     voice
       ? "Your replies are read aloud by an Armenian voice: write every name, brand or foreign word in Armenian letters (e.g. «ֆեյդ», not «fade»), never in Latin letters."
       : "This is a text chat: the barbershop's name may be written in Latin letters as above.",
@@ -972,14 +977,23 @@ async function chatReply(env: Env, req: Request): Promise<Response> {
  * chatId is the conversation (bookings made in it are the writer's own).
  */
 async function chatTurn(env: Env, biz: number, chatId: string, history: { role: "user" | "assistant"; content: string }[], model = CHAT_MODEL): Promise<{ reply: string; booked: boolean } | { error: string }> {
-  const conv: Record<string, unknown>[] = [{ role: "system", content: await assistantInstructions(env, { biz, name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
-  // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
-  // remind the model what it booked here, so a later change replaces that booking instead of failing.
-  const { results: made } = await env.DB.prepare("SELECT id, service_id, date, start_min, client_name FROM bookings WHERE business_id = ? AND conversation_id = ? AND status = 'confirmed'")
-    .bind(biz, `chat-${chatId}`)
-    .all<{ id: number; service_id: string; date: string; start_min: number; client_name: string | null }>();
-  if (made.length) conv.splice(1, 0, { role: "system", content: `Bookings you made earlier in this chat: ${made.map((b) => `B-${1000 + b.id} ${b.service_id} ${b.date} ${toHHMM(b.start_min)} ${b.client_name ?? ""}`).join("; ")}.` });
-  const tools = REALTIME_TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  // Shops have no calendar: the assistant answers from the catalog of Instagram posts, and shared posts are
+  // turned into notes saying which catalog entry they are.
+  const shop = (await bizCategory(env.DB, biz)) === "shop";
+  let conv: Record<string, unknown>[];
+  if (shop) {
+    const { history: noted, products } = await notePosts(env, biz, history);
+    conv = [{ role: "system", content: shopInstructions(await getSettings(env.DB, biz), products) }, ...noted];
+  } else {
+    conv = [{ role: "system", content: await assistantInstructions(env, { biz, name: "Անի", callerPhone: null, channel: "chat" }) }, ...history];
+    // The page sends only the text of the chat, so tool results (booking ids) are gone by the next message:
+    // remind the model what it booked here, so a later change replaces that booking instead of failing.
+    const { results: made } = await env.DB.prepare("SELECT id, service_id, date, start_min, client_name FROM bookings WHERE business_id = ? AND conversation_id = ? AND status = 'confirmed'")
+      .bind(biz, `chat-${chatId}`)
+      .all<{ id: number; service_id: string; date: string; start_min: number; client_name: string | null }>();
+    if (made.length) conv.splice(1, 0, { role: "system", content: `Bookings you made earlier in this chat: ${made.map((b) => `B-${1000 + b.id} ${b.service_id} ${b.date} ${toHHMM(b.start_min)} ${b.client_name ?? ""}`).join("; ")}.` });
+  }
+  const tools = shop ? [] : REALTIME_TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const logLine = (role: string, text: string, ms?: number) =>
     env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text, latency_ms) VALUES (?, ?, ?, ?, ?, ?)").bind(biz, `chat-${chatId}`, history.length, role, text.slice(0, 4000), ms ?? null).run();
 
@@ -987,7 +1001,7 @@ async function chatTurn(env: Env, biz: number, chatId: string, history: { role: 
   let booked = false;
   for (let round = 0; round < 5; round++) {
     // GPT-6 only allows function tools in chat completions with reasoning off
-    const payload = JSON.stringify({ model, messages: conv, tools, ...(model.startsWith("gpt-6") ? { reasoning_effort: "none" } : {}) });
+    const payload = JSON.stringify({ model, messages: conv, ...(tools.length ? { tools } : {}), ...(model.startsWith("gpt-6") ? { reasoning_effort: "none" } : {}) });
     // OpenAI sometimes stalls on one request (a 28-token reply once took 36 s): give up after 10 s and ask again
     const ask = (ms: number) => fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -1035,6 +1049,106 @@ async function chatTurn(env: Env, biz: number, chatId: string, history: { role: 
   return { error: "too_many_steps" };
 }
 
+// ---------------------------------------------------------------- shops: a catalog of Instagram posts
+
+interface Product { id: number; post_url: string; shortcode: string | null; media_id: string | null; caption: string | null; description: string; active: number; has_photo: number }
+
+const bizCategory = async (db: D1Database, biz: number) => (await db.prepare("SELECT category FROM businesses WHERE id = ?").bind(biz).first<{ category: string }>())?.category ?? "barber";
+
+const POST_LINK = /instagram\.com\/(?:[\w.]+\/)?(?:p|reels?|tv)\/([\w-]{5,})/gi;
+/** instagram.com/p/<code>/, /reel/<code>/, /<user>/p/<code>/ → <code> */
+const shortcodeOf = (url: string) => new RegExp(POST_LINK.source, "i").exec(url)?.[1] ?? null;
+
+async function getProducts(db: D1Database, biz: number, activeOnly: boolean): Promise<Product[]> {
+  const sql = `SELECT id, post_url, shortcode, media_id, caption, description, active, photo IS NOT NULL AS has_photo FROM products WHERE business_id = ? ${activeOnly ? "AND active = 1" : ""} ORDER BY id DESC`;
+  return (await db.prepare(sql).bind(biz).all<Product>()).results;
+}
+
+/**
+ * Meta sends a shared post's media id, not its link: look up the ids (and captions) of the catalog's posts
+ * among the connected Instagram account's posts, matching links by their shortcode. Returns how many were found.
+ */
+async function linkPosts(env: Env, biz: number): Promise<number> {
+  const acc = await env.DB.prepare("SELECT ig_user_id, token FROM instagram_accounts WHERE business_id = ? LIMIT 1").bind(biz).first<{ ig_user_id: string; token: string }>();
+  if (!acc) return 0;
+  const { results: todo } = await env.DB.prepare("SELECT id, shortcode FROM products WHERE business_id = ? AND shortcode IS NOT NULL AND media_id IS NULL").bind(biz).all<{ id: number; shortcode: string }>();
+  const want = new Map(todo.map((p) => [p.shortcode, p.id]));
+  let url = want.size ? `${META_GRAPH}/${acc.ig_user_id}/media?fields=id,permalink,caption&limit=100` : "";
+  let found = 0;
+  for (let page = 0; page < 5 && url && want.size; page++) {
+    const res = await fetch(url, { headers: { authorization: `Bearer ${acc.token}` } });
+    if (!res.ok) { console.error("instagram media", res.status, (await res.text()).slice(0, 300)); break; }
+    const data = (await res.json()) as { data?: { id: string; permalink?: string; caption?: string }[]; paging?: { next?: string } };
+    for (const m of data.data ?? []) {
+      const code = m.permalink ? shortcodeOf(m.permalink) : null;
+      const id = code ? want.get(code) : undefined;
+      if (!id) continue;
+      await env.DB.prepare("UPDATE products SET media_id = ?, caption = ? WHERE id = ?").bind(m.id, (m.caption ?? "").slice(0, 2000), id).run();
+      want.delete(code!);
+      found++;
+    }
+    url = data.paging?.next ?? "";
+  }
+  return found;
+}
+
+// How an Instagram attachment is kept in the chat log: «[post <media id> «caption»]», «[photo]».
+const POST_MARK = /\[post (\S*)(?: «([^»]*)»)?\]/g;
+const sameCaption = (a: string | null, b: string) => !!a && !!b.trim() && a.trim().slice(0, 80) === b.trim().slice(0, 80);
+
+/** Client messages with a note on which catalog post they shared or linked to. */
+async function notePosts(env: Env, biz: number, history: { role: "user" | "assistant"; content: string }[]) {
+  let products = await getProducts(env.DB, biz, true);
+  let relinked = false;
+  const out: typeof history = [];
+  for (const m of history) {
+    if (m.role !== "user") { out.push(m); continue; }
+    const notes: string[] = [];
+    for (const [, code] of m.content.matchAll(POST_LINK)) {
+      const p = products.find((x) => x.shortcode === code);
+      notes.push(p ? `(The client means catalog post #${p.id}.)` : "(The client sent a link to an Instagram post that isn't in the catalog.)");
+    }
+    for (const [, id, caption = ""] of m.content.matchAll(POST_MARK)) {
+      let p = id ? products.find((x) => x.media_id === id) : undefined;
+      // a post added to the catalog after its id was last looked up
+      if (!p && id && !relinked) {
+        relinked = true;
+        if (await linkPosts(env, biz).catch(() => 0)) { products = await getProducts(env.DB, biz, true); p = products.find((x) => x.media_id === id); }
+      }
+      p ??= products.find((x) => sameCaption(x.caption, caption));
+      notes.push(p ? `(The client shared catalog post #${p.id}.)` : `(The client shared an Instagram post that isn't in the catalog${caption ? `; its caption: «${caption}»` : ""}.)`);
+    }
+    if (m.content.includes("[photo]")) notes.push("(The client sent a photo or a screenshot; you can't see images.)");
+    const text = m.content.replace(POST_MARK, "").replaceAll("[photo]", "").trim();
+    out.push({ role: "user", content: [text, ...notes].filter(Boolean).join("\n") });
+  }
+  return { history: out, products };
+}
+
+/** The shop assistant: answers about the items in the owner's posts, prices, delivery; takes an order for the manager. */
+function shopInstructions(settings: Settings, products: Product[]): string {
+  const catalog = products.map((p) => `#${p.id}${p.post_url ? ` (${p.post_url})` : ""}:\n${p.description}`).join("\n\n");
+  const { hoursText } = promptFacts(settings, []);
+  const address = settings.address.trim(), delivery = settings.delivery?.trim();
+  return [
+    `Your name is Անի. You answer Instagram Direct and the website chat of the shop called exactly «${settings.shop_name}». Never change, translate or invent the shop's name.`,
+    settings.enabled ? "" : "The owner has switched you off for now: apologize briefly and say a manager will answer in this chat later. Nothing else.",
+    "Clients often share one of the shop's Instagram posts — sometimes with no words, sometimes asking «how much?», «what sizes?». Such a message comes with a note in brackets saying which catalog post it is. Then answer about exactly that post: name every item in it with its price as written in the catalog (one short line per item if there are several), and add delivery or the address when it helps — like a good shop assistant, e.g. «Բարև Ձեզ 😊 Ջինսը՝ 25 000 դրամ, կոշիկները՝ 32 000 դրամ։ Առաքումն անվճար է։»",
+    "If the note says the post isn't in the catalog, or the client sent a photo, don't guess: say you couldn't find that item and ask them to share the post itself or write which item and colour; if it's still unclear, say a manager will answer in this chat.",
+    "Answer only from the catalog and the owner's information below. Never invent items, prices, sizes, colours, stock, discounts or delivery terms. When something isn't written there (a size, whether it's in stock), say you'll check with the manager, who will answer in this chat: «Կճշտեմ մենեջերի հետ, և նա կպատասխանի Ձեզ այստեղ։»",
+    "If the client wants to buy: ask, one thing at a time, what's still missing — the item (and the size or colour, if the catalog gives options), their name, their phone and the delivery address or pickup — then say the manager will confirm the order in this chat.",
+    "Greet back briefly when the client greets you, and greet briefly in your first reply of a conversation; not in later replies.",
+    "Answer in the language the client writes in: Armenian, Russian or English. In Armenian:",
+    ...ARMENIAN_STYLE,
+    "Tone: warm, friendly and short — 1–4 sentences. No markdown (no **, #, or bullet lists); plain separate lines are fine for several items. At most one emoji. Prices in digits: «25 000 դրամ».",
+    `Today: ${localNow().date} (${weekdayName(localNow().date)}), Yerevan time. Opening hours: ${hoursText}.`,
+    address ? `Shop address — when asked or when it helps: «${address}». Never invent another.` : "The address isn't filled in: never invent one; a manager can tell it.",
+    delivery ? `Delivery and payment (from the owner): ${delivery}` : "Delivery terms aren't filled in: never invent them; say a manager will tell.",
+    `Catalog — each entry is one Instagram post with what's in it; only these items and prices exist:\n${catalog || "(empty: the owner hasn't added items yet — say a manager will answer)"}`,
+    settings.extra_instructions ? `More information from the owner (facts about this shop; answer from them):\n${settings.extra_instructions}` : "",
+  ].filter(Boolean).join("\n");
+}
+
 // ---------------------------------------------------------------- dashboard
 
 function validSettings(input: Record<string, unknown>, current: Settings): Settings {
@@ -1045,6 +1159,7 @@ function validSettings(input: Record<string, unknown>, current: Settings): Setti
   if ("address" in input) s.address = cleanText(input.address, 120);
   if ("greeting" in input) s.greeting = cleanText(input.greeting, 200) || current.greeting;
   if ("extra_instructions" in input) s.extra_instructions = cleanText(input.extra_instructions, 1500);
+  if ("delivery" in input) s.delivery = cleanText(input.delivery, 600);
   if ("barbers" in input) {
     const n = Number(input.barbers);
     if (!Number.isInteger(n) || n < 1 || n > 20) throw new HttpError(400, "barbers must be 1–20");
@@ -1099,7 +1214,9 @@ async function shopState(env: Env, biz: number) {
     env.DB.prepare("SELECT * FROM blocks WHERE business_id = ? AND date >= ? ORDER BY date, start_min").bind(biz, from),
   ]);
   const b = await env.DB.prepare("SELECT slug, category FROM businesses WHERE id = ?").bind(biz).first<{ slug: string; category: string }>();
-  return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), barbers: await getBarbers(env.DB, biz), bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
+  const products = b?.category === "shop" ? await getProducts(env.DB, biz, false) : [];
+  const instagram = !!(await env.DB.prepare("SELECT 1 FROM instagram_accounts WHERE business_id = ? LIMIT 1").bind(biz).first());
+  return { settings: await getSettings(env.DB, biz), services: await getServices(env.DB, biz, false), barbers: await getBarbers(env.DB, biz), products, instagram, bookings, blocks, today: localNow().date, slug: b?.slug, category: b?.category };
 }
 
 /**
@@ -1231,6 +1348,47 @@ async function shopApi(env: Env, biz: number, method: string, sub: string, body:
     return json({ barbers: await getBarbers(env.DB, biz) });
   }
 
+  // Shops: one catalog entry per Instagram post — the link, what's in it and the prices, an optional photo.
+  const product = /^products(?:\/(\d+))?(?:\/(photo|delete))?$/.exec(sub);
+  if (product) {
+    const id = Number(product[1]) || 0;
+    if (product[2] === "photo" && method === "GET") {
+      const row = await env.DB.prepare("SELECT photo FROM products WHERE id = ? AND business_id = ?").bind(id, biz).first<{ photo: string | null }>();
+      const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(row?.photo ?? "");
+      if (!m) return json({ error: "not_found" }, 404);
+      return new Response(Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)), { headers: { "content-type": m[1], "cache-control": "private, max-age=86400" } });
+    }
+    if (product[2] === "delete" && method === "POST") {
+      const res = await env.DB.prepare("DELETE FROM products WHERE id = ? AND business_id = ?").bind(id, biz).run();
+      return res.meta.changes ? json({ ok: true }) : json({ error: "not_found" }, 404);
+    }
+    if (!product[2] && (method === "POST" || method === "PUT")) {
+      const description = cleanText(body.description, 2000);
+      let postUrl = cleanText(body.post_url, 300);
+      if (!description) throw new HttpError(400, "description_required");
+      if (postUrl && !/^https?:\/\//i.test(postUrl)) postUrl = `https://${postUrl}`;
+      const shortcode = postUrl ? shortcodeOf(postUrl) : null;
+      if (postUrl && (!shortcode || !/^https:\/\/(www\.)?instagram\.com\//i.test(postUrl.replace(/^http:/i, "https:")))) throw new HttpError(400, "bad_post_url");
+      // photo: a small JPEG made in the browser; "" removes it, absent keeps it
+      const photo = typeof body.photo === "string" ? body.photo : undefined;
+      if (photo && (!/^data:image\/(jpeg|png|webp);base64,/.test(photo) || photo.length > 400_000)) throw new HttpError(400, "bad_photo");
+      const active = body.active === false || body.active === 0 ? 0 : 1;
+      if (method === "POST" && !id) {
+        const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM products WHERE business_id = ?").bind(biz).first<{ n: number }>();
+        if ((count?.n ?? 0) >= 300) throw new HttpError(400, "too_many_products");
+        await env.DB.prepare("INSERT INTO products (business_id, post_url, shortcode, description, photo, active) VALUES (?, ?, ?, ?, ?, ?)").bind(biz, postUrl, shortcode, description, photo || null, active).run();
+      } else if (method === "PUT" && id) {
+        const old = await env.DB.prepare("SELECT shortcode FROM products WHERE id = ? AND business_id = ?").bind(id, biz).first<{ shortcode: string | null }>();
+        if (!old) return json({ error: "not_found" }, 404);
+        const relink = old.shortcode !== shortcode; // another post: its id must be looked up again
+        await env.DB.prepare(`UPDATE products SET post_url = ?, shortcode = ?, description = ?, active = ?${relink ? ", media_id = NULL, caption = NULL" : ""}${photo !== undefined ? ", photo = ?" : ""} WHERE id = ? AND business_id = ?`)
+          .bind(postUrl, shortcode, description, active, ...(photo !== undefined ? [photo || null] : []), id, biz).run();
+      } else return json({ error: "not_found" }, 404);
+      await linkPosts(env, biz).catch((err) => console.error("link posts", err));
+      return json({ products: await getProducts(env.DB, biz, false) });
+    }
+  }
+
   if (sub === "bookings" && method === "POST") {
     const settings = await getSettings(env.DB, biz);
     const service = findService(await getServices(env.DB, biz, false), body.service_id);
@@ -1326,17 +1484,35 @@ async function instagramWebhook(env: Env, req: Request, ctx: ExecutionContext): 
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.INSTAGRAM_APP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = [...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw)))].map((b) => b.toString(16).padStart(2, "0")).join("");
   if (!safeEqual(req.headers.get("x-hub-signature-256") ?? "", `sha256=${sig}`)) return new Response("bad signature", { status: 401 });
-  const body = JSON.parse(raw) as { entry?: { id: string; messaging?: { sender?: { id: string }; message?: { mid?: string; text?: string; is_echo?: boolean } }[] }[] };
+  const body = JSON.parse(raw) as { entry?: { id: string; messaging?: { sender?: { id: string }; message?: { mid?: string; text?: string; is_echo?: boolean; attachments?: IgAttachment[] } }[] }[] };
   for (const entry of body.entry ?? []) {
     for (const m of entry.messaging ?? []) {
-      if (!m.message?.text || m.message.is_echo || !m.sender?.id || !m.message.mid) continue;
-      ctx.waitUntil(instagramReply(env, entry.id, m.sender.id, m.message.mid, m.message.text).catch((err) => console.error("instagram", err)));
+      if (!(m.message?.text || m.message?.attachments?.length) || m.message.is_echo || !m.sender?.id || !m.message.mid) continue;
+      ctx.waitUntil(instagramReply(env, entry.id, m.sender.id, m.message.mid, m.message.text ?? "", m.message.attachments ?? []).catch((err) => console.error("instagram", err)));
     }
   }
   return new Response("ok"); // answer Meta fast; the reply goes out in the background
 }
 
-async function instagramReply(env: Env, igUserId: string, senderId: string, mid: string, text: string) {
+// A shared post comes as «ig_post» (older apps also got «share»), with the post's media id and caption.
+type IgAttachment = { type?: string; payload?: { ig_post_media_id?: string; reel_video_id?: string; id?: string; title?: string; url?: string } };
+
+/** A shop's client message with its attachments written into the text, as the chat log keeps them. */
+function withAttachments(text: string, attachments: IgAttachment[]) {
+  const marks = attachments.map((a) => {
+    const p = a.payload ?? {};
+    if (["ig_post", "share", "post", "ig_reel", "reel"].includes(a.type ?? "")) {
+      const id = String(p.ig_post_media_id ?? p.reel_video_id ?? p.id ?? "").replace(/\s/g, "");
+      const caption = (p.title ?? "").replace(/[«»\[\]]/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+      const link = p.url && /instagram\.com/.test(p.url) ? ` ${p.url}` : "";
+      return `[post ${id || "-"}${caption ? ` «${caption}»` : ""}]${link}`;
+    }
+    return a.type === "image" ? "[photo]" : "";
+  });
+  return [cleanText(text, 1000), ...marks].filter(Boolean).join("\n");
+}
+
+async function instagramReply(env: Env, igUserId: string, senderId: string, mid: string, text: string, attachments: IgAttachment[] = []) {
   if (senderId === igUserId) return;
   const account = await env.DB.prepare("SELECT business_id, token FROM instagram_accounts WHERE ig_user_id = ?").bind(igUserId).first<{ business_id: number; token: string }>();
   if (!account) {
@@ -1351,7 +1527,12 @@ async function instagramReply(env: Env, igUserId: string, senderId: string, mid:
     "SELECT role, text FROM realtime_log WHERE call_id = ? AND role IN ('user', 'agent') AND created_at > datetime('now', '-24 hours') ORDER BY id DESC LIMIT 20",
   ).bind(`chat-${chatId}`).all<{ role: string; text: string }>();
   const history = results.reverse().map((r) => ({ role: r.role === "user" ? ("user" as const) : ("assistant" as const), content: r.text }));
-  history.push({ role: "user", content: cleanText(text, 1000) });
+  if (attachments.length) await env.DB.prepare("INSERT INTO realtime_log (business_id, call_id, turn, role, text) VALUES (?, ?, ?, 'event', ?)")
+    .bind(account.business_id, `chat-${chatId}`, history.length, `instagram attachments: ${JSON.stringify(attachments).slice(0, 1500)}`).run();
+  // shops read shared posts; a barbershop only answers words
+  const content = (await bizCategory(env.DB, account.business_id)) === "shop" ? withAttachments(text, attachments) : cleanText(text, 1000);
+  if (!content) return;
+  history.push({ role: "user", content });
   const out = await chatTurn(env, account.business_id, chatId, history);
   const reply = "error" in out ? "Ներողություն, հիմա չեմ կարողանում պատասխանել։ Փորձեք մի փոքր ուշ։" : out.reply;
   if (!reply) return; // nothing to say (e.g. a like after the goodbye)
@@ -1587,6 +1768,7 @@ export default {
           address: settings.address,
           greeting: settings.greeting,
           extra_instructions: settings.extra_instructions,
+          category: await bizCategory(env.DB, biz),
           services: services.map(({ id, category, name_hy, name_en, duration_min, price_min, price_max }) => ({ id, category, name_hy, name_en, duration_min, price_min, price_max })),
           services_text: servicesText,
           hours_text: hoursText,

@@ -40,6 +40,17 @@ const T = {
     "ig.off": "Подключите Instagram — ассистент будет отвечать клиентам в Direct и записывать их в календарь.", "ig.on": "Подключено:", "ig.connect": "Подключить Instagram", "ig.reconnect": "Переподключить", "ig.disconnect": "Отключить Instagram",
     "ig.hint": "Нужен профессиональный аккаунт Instagram (Бизнес или Автор), привязанный к странице Facebook.", "ig.ok": "Instagram подключён. Ассистент уже отвечает в Direct.", "ig.failed": "Не удалось подключить Instagram. Попробуйте ещё раз.",
     "ig.cancelled": "Подключение отменено.", "ig.nopage": "Не нашли Instagram, привязанный к странице Facebook. Привяжите его в настройках Instagram и попробуйте снова.", "ig.offAsk": "Отключить Instagram? Ассистент перестанет отвечать в Direct.",
+    "cat.shop": "Магазин: одежда, обувь, товары", "tab.products": "Товары",
+    "pr.title": "Товары из постов", "pr.sub": "Вставьте ссылку на пост в Instagram и напишите, что в нём и сколько стоит. Клиент перешлёт этот пост в Direct — ассистент ответит по вашему описанию.", "pr.add": "Товар",
+    "pr.new": "Новый товар", "pr.editTitle": "Изменить товар", "pr.link": "Ссылка на пост в Instagram", "pr.desc": "Что в посте и сколько стоит",
+    "pr.descPh": "Джинсы Levi's 501, синие — 25 000 ֏, размеры 28–34\nКроссовки Nike — 32 000 ֏, размеры 40–45", "pr.photo": "Фото (необязательно)", "pr.photoDel": "Убрать фото", "pr.on": "Показывать ассистенту",
+    "pr.edit": "Изменить", "pr.delAsk": "Удалить этот товар?", "pr.empty": "Товаров пока нет", "pr.emptyHint": "Добавьте первый пост: ссылку и что в нём продаётся.",
+    "pr.linked": "Пост найден в Instagram", "pr.waiting": "Подключите Instagram — и ассистент узнает этот пост в Direct", "pr.notFound": "Пост не найден в вашем Instagram — проверьте ссылку", "pr.noLink": "Без ссылки", "pr.hidden": "скрыт",
+    "err.bad_post_url": "Это не ссылка на пост Instagram. Пример: https://www.instagram.com/p/ABC123/", "err.description_required": "Опишите, что в посте и сколько стоит.", "err.bad_photo": "Не удалось загрузить фото. Попробуйте другое.", "err.too_many_products": "Достигнут лимит: 300 товаров.",
+    "set.delivery": "Доставка и оплата", "set.deliveryHint": "Ассистент скажет это клиенту, когда нужно.", "set.deliveryPh": "Доставка по Еревану бесплатно, 1–2 дня. Оплата наличными или картой при получении.",
+    "ig.off.shop": "Подключите Instagram — ассистент будет отвечать клиентам в Direct по вашим товарам и ценам.",
+    "test.sub.shop": "Он знает ваши товары, цены и доставку. Напишите как клиент или вставьте ссылку на пост — так же, как клиент перешлёт его в Direct.",
+    "set.extraHint.shop": "Размеры, возврат, акции, как сделать заказ — коротко, любым языком.",
     save: "Сохранить",
     "test.title": "Проверьте своего ассистента", "test.sub": "Он уже знает ваши услуги, цены и часы. Напишите ему как клиент — запись появится в вашем календаре.",
     "test.call": "Открыть чат", "test.copy": "Скопировать ссылку", "test.copied": "Ссылка скопирована", "test.note": "Так же он отвечает вашим клиентам в Instagram Direct, когда Instagram подключён в настройках.",
@@ -86,6 +97,17 @@ const T = {
     "ig.off": "Միացրեք Instagram-ը, և օգնականը կպատասխանի հաճախորդներին Direct-ում ու կգրանցի նրանց օրացույցում։", "ig.on": "Միացված է՝", "ig.connect": "Միացնել Instagram-ը", "ig.reconnect": "Կրկին միացնել", "ig.disconnect": "Անջատել Instagram-ը",
     "ig.hint": "Անհրաժեշտ է Instagram-ի մասնագիտական հաշիվ (Բիզնես կամ Հեղինակ)՝ կապված Facebook էջին։", "ig.ok": "Instagram-ը միացված է։ Օգնականն արդեն պատասխանում է Direct-ում։", "ig.failed": "Չհաջողվեց միացնել Instagram-ը։ Փորձեք կրկին։",
     "ig.cancelled": "Միացումը չեղարկվեց։", "ig.nopage": "Facebook էջին կապված Instagram չգտանք։ Կապեք այն Instagram-ի կարգավորումներում և փորձեք կրկին։", "ig.offAsk": "Անջատե՞լ Instagram-ը։ Օգնականը կդադարի պատասխանել Direct-ում։",
+    "cat.shop": "Խանութ՝ հագուստ, կոշիկ, ապրանքներ", "tab.products": "Ապրանքներ",
+    "pr.title": "Ապրանքներ գրառումներից", "pr.sub": "Տեղադրեք Instagram-ի գրառման հղումը և գրեք, թե ինչ կա դրանում և ինչ արժե։ Երբ հաճախորդը Direct-ում ուղարկի այդ գրառումը, օգնականը կպատասխանի Ձեր նկարագրությամբ։", "pr.add": "Ապրանք",
+    "pr.new": "Նոր ապրանք", "pr.editTitle": "Փոփոխել ապրանքը", "pr.link": "Instagram-ի գրառման հղումը", "pr.desc": "Ինչ կա գրառման մեջ և ինչ արժե",
+    "pr.descPh": "Ջինս Levi's 501, կապույտ — 25 000 ֏, չափսեր 28–34\nՍպորտային կոշիկներ Nike — 32 000 ֏, չափսեր 40–45", "pr.photo": "Լուսանկար (պարտադիր չէ)", "pr.photoDel": "Հեռացնել լուսանկարը", "pr.on": "Ցույց տալ օգնականին",
+    "pr.edit": "Փոփոխել", "pr.delAsk": "Ջնջե՞լ այս ապրանքը", "pr.empty": "Ապրանքներ դեռ չկան", "pr.emptyHint": "Ավելացրեք առաջին գրառումը՝ հղումը և թե ինչ է վաճառվում դրանում։",
+    "pr.linked": "Գրառումը գտնվել է Instagram-ում", "pr.waiting": "Միացրեք Instagram-ը, և օգնականը կճանաչի այս գրառումը Direct-ում", "pr.notFound": "Գրառումը Ձեր Instagram-ում չգտնվեց. ստուգեք հղումը", "pr.noLink": "Առանց հղման", "pr.hidden": "թաքցված",
+    "err.bad_post_url": "Սա Instagram-ի գրառման հղում չէ։ Օրինակ՝ https://www.instagram.com/p/ABC123/", "err.description_required": "Գրեք, թե ինչ կա գրառման մեջ և ինչ արժե։", "err.bad_photo": "Չհաջողվեց վերբեռնել լուսանկարը։ Փորձեք այլ լուսանկար։", "err.too_many_products": "Սահմանաչափը 300 ապրանք է։",
+    "set.delivery": "Առաքում և վճարում", "set.deliveryHint": "Օգնականը դա կասի հաճախորդին, երբ անհրաժեշտ լինի։", "set.deliveryPh": "Երևանում առաքումն անվճար է, 1–2 օրում։ Վճարումը՝ կանխիկ կամ քարտով՝ ստանալիս։",
+    "ig.off.shop": "Միացրեք Instagram-ը, և օգնականը Direct-ում կպատասխանի հաճախորդներին Ձեր ապրանքների և գների մասին։",
+    "test.sub.shop": "Նա գիտի Ձեր ապրանքները, գներն ու առաքման պայմանները։ Գրեք որպես հաճախորդ կամ տեղադրեք գրառման հղումը, ինչպես հաճախորդը կուղարկի այն Direct-ում։",
+    "set.extraHint.shop": "Չափսեր, վերադարձ, ակցիաներ, ինչպես պատվիրել՝ կարճ, ցանկացած լեզվով։",
     save: "Պահպանել",
     "test.title": "Ստուգեք Ձեր օգնականին", "test.sub": "Նա արդեն գիտի Ձեր ծառայությունները, գներն ու ժամերը։ Գրեք նրան որպես հաճախորդ, և գրանցումը կհայտնվի Ձեր օրացույցում։",
     "test.call": "Բացել չատը", "test.copy": "Պատճենել հղումը", "test.copied": "Հղումը պատճենված է", "test.note": "Նույն կերպ նա պատասխանում է Ձեր հաճախորդներին Instagram Direct-ում, երբ Instagram-ը միացված է կարգավորումներում։",
@@ -97,7 +119,8 @@ const T = {
 const $ = (id) => document.getElementById(id);
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 let lang = T[store.get("bvLang")] ? store.get("bvLang") : navigator.language?.startsWith("ru") ? "ru" : "hy";
-const t = (k) => T[lang][k] ?? T.ru[k] ?? k;
+// shops get their own wording where a key has a «.shop» variant
+const t = (k) => (me?.category === "shop" && (T[lang][`${k}.shop`] ?? T.ru[`${k}.shop`])) || (T[lang][k] ?? T.ru[k] ?? k);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 const toMin = (s) => { const [h, m] = String(s).split(":").map(Number); return h * 60 + (m || 0); };
@@ -109,6 +132,7 @@ let me = null, state = null, day = null, editServices = null;
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
   document.querySelectorAll("#langs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
   document.title = `${lang === "hy" ? "Անձնական էջ" : "Кабинет"} — UMNIK`;
   if (state) { render(); if (statsData) renderStats(); }
@@ -231,7 +255,17 @@ async function boot() {
   $("logout").hidden = false;
   day ??= state.today;
   editServices = null;
+  applyCategory();
+  applyLang();
   render();
+}
+
+// A barbershop gets the calendar, services and analytics; a shop gets its products instead.
+function applyCategory() {
+  const cat = me.category === "shop" ? "shop" : "barber";
+  document.querySelectorAll("#cab [data-for]").forEach((el) => (el.hidden = el.dataset.for !== cat));
+  const tabs = [...document.querySelectorAll(".cab-tabs button")].filter((b) => !b.hidden);
+  if (!tabs.some((b) => b.getAttribute("aria-selected") === "true")) tabs[0].click();
 }
 
 async function reload() {
@@ -246,6 +280,7 @@ function render() {
   renderDays();
   renderDay();
   renderServices();
+  renderProducts();
   renderSettings();
   const link = `${location.origin}/try/?biz=${me.slug}`;
   $("tryChat").href = link;
@@ -422,6 +457,65 @@ $("saveServices").addEventListener("click", async () => {
   }
 });
 
+// products (shops): one entry per Instagram post
+let photoVer = Date.now();
+const BAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 8h12l-1 12H7z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg>';
+const shortLink = (u) => u.replace(/^https?:\/\/(www\.)?/, "").replace(/\?.*$/, "").replace(/\/$/, "");
+function renderProducts() {
+  const list = $("prList"), items = state.products ?? [];
+  if (!items.length) { list.innerHTML = `<div class="empty"><b>${esc(t("pr.empty"))}</b>${esc(t("pr.emptyHint"))}</div>`; return; }
+  list.replaceChildren(...items.map((p) => {
+    const el = document.createElement("div");
+    el.className = `pr${p.active ? "" : " off"}`;
+    const status = !p.post_url ? t("pr.noLink") : p.media_id ? `✓ ${t("pr.linked")}` : t(state.instagram ? "pr.notFound" : "pr.waiting");
+    el.innerHTML = `<div class="pr-photo">${p.has_photo ? `<img src="/api/app/products/${p.id}/photo?v=${photoVer}" alt="" loading="lazy">` : BAG}</div>
+      <div class="pr-body">
+        ${p.post_url ? `<a class="pr-link" href="${esc(p.post_url)}" target="_blank" rel="noopener">${esc(shortLink(p.post_url))}</a>` : ""}
+        <p class="pr-desc">${esc(p.description)}</p>
+        <div class="tags"><span class="tag${p.media_id ? " ai" : ""}">${esc(status)}</span>${p.active ? "" : `<span class="tag">${esc(t("pr.hidden"))}</span>`}</div>
+      </div>
+      <div class="pr-actions"><button class="btn btn-ghost btn-sm" type="button">${esc(t("pr.edit"))}</button><button class="icon-btn" type="button" aria-label="${esc(t("pr.delAsk"))}">×</button></div>`;
+    el.querySelector(".pr-actions .btn").addEventListener("click", () => productDialog(p));
+    el.querySelector(".icon-btn").addEventListener("click", async () => {
+      if (!confirm(t("pr.delAsk"))) return;
+      try { await api(`/api/app/products/${p.id}/delete`, {}); await reload(); } catch (e) { toast(errText(e), true); }
+    });
+    return el;
+  }));
+}
+
+// a phone photo is several MB: keep an 800px JPEG
+async function shrinkPhoto(file) {
+  try {
+    const img = await createImageBitmap(file);
+    const k = Math.min(1, 800 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * k);
+    c.height = Math.round(img.height * k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.82, url = c.toDataURL("image/jpeg", q);
+    while (url.length > 380_000 && q > 0.4) url = c.toDataURL("image/jpeg", (q -= 0.1));
+    return url;
+  } catch { throw new Error("bad_photo"); }
+}
+
+function productDialog(p = null) {
+  openDialog(t(p ? "pr.editTitle" : "pr.new"), `
+    <label class="field"><span>${esc(t("pr.link"))}</span><input class="input" name="post_url" type="url" inputmode="url" maxlength="300" placeholder="https://www.instagram.com/p/…" value="${esc(p?.post_url ?? "")}"></label>
+    <label class="field"><span>${esc(t("pr.desc"))}</span><textarea class="input" name="description" rows="5" maxlength="2000" placeholder="${esc(t("pr.descPh"))}">${esc(p?.description ?? "")}</textarea></label>
+    <label class="field"><span>${esc(t("pr.photo"))}</span><input class="input" name="photo" type="file" accept="image/*"></label>
+    ${p?.has_photo ? `<label class="switch-row"><span><b>${esc(t("pr.photoDel"))}</b></span><input type="checkbox" class="switch" name="photo_del"></label>` : ""}
+    <label class="switch-row"><span><b>${esc(t("pr.on"))}</b></span><input type="checkbox" class="switch" name="active" ${!p || p.active ? "checked" : ""}></label>`,
+  async (d) => {
+    const body = { post_url: d.post_url.trim(), description: d.description, active: !!d.active };
+    if (d.photo?.size) body.photo = await shrinkPhoto(d.photo);
+    else if (d.photo_del) body.photo = "";
+    await api(p ? `/api/app/products/${p.id}` : "/api/app/products", body, p ? "PUT" : "POST");
+    photoVer = Date.now();
+  });
+}
+$("addProduct").addEventListener("click", () => productDialog());
+
 // settings and hours
 async function loadInstagram() {
   try {
@@ -497,7 +591,7 @@ function renderSettings() {
   renderBarbers();
   const f = $("setForm"), s = state.settings;
   f.enabled.checked = s.enabled;
-  for (const k of ["shop_name", "shop_name_spoken", "address", "barbers", "extra_instructions"]) f[k].value = s[k] ?? "";
+  for (const k of ["shop_name", "shop_name_spoken", "address", "barbers", "extra_instructions", "delivery"]) f[k].value = s[k] ?? "";
   const order = [1, 2, 3, 4, 5, 6, 0];
   $("hours").replaceChildren(...order.map((wd) => {
     const h = s.hours[wd];
@@ -521,7 +615,7 @@ $("setForm").addEventListener("submit", async (e) => {
   try {
     await api("/api/app/settings", {
       enabled: f.enabled.checked, shop_name: f.shop_name.value, shop_name_spoken: f.shop_name_spoken.value, address: f.address.value,
-      barbers: Number(f.barbers.value), extra_instructions: f.extra_instructions.value, hours,
+      barbers: Number(f.barbers.value), extra_instructions: f.extra_instructions.value, delivery: f.delivery.value, hours,
     }, "PUT");
     await reload();
     msg.textContent = t("set.saved");

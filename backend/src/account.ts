@@ -15,7 +15,7 @@ const VERIFY_TTL_MS = 48 * 3600_000;
 const RESET_TTL_MS = 2 * 3600_000;
 const PBKDF2_ITERATIONS = 100_000; // the most Workers allow
 const FROM = "UMNIK <no-reply@umnik.getweboost.com>";
-export const CATEGORIES = ["barber", "dental", "callcenter", "office", "food", "other"];
+export const CATEGORIES = ["barber", "shop", "dental", "callcenter", "office", "food", "other"];
 
 // ---------------------------------------------------------------- passwords and tokens
 

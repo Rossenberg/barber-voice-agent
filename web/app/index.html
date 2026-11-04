@@ -52,6 +52,7 @@
         <label class="field"><span data-i18n="f.category">Сфера</span>
           <select class="input" name="category">
             <option value="barber" data-i18n="cat.barber">Барбершоп или салон</option>
+            <option value="shop" data-i18n="cat.shop">Магазин: одежда, обувь, товары</option>
             <option value="dental" disabled data-i18n="cat.dental">Стоматология или клиника — скоро</option>
             <option value="office" disabled data-i18n="cat.office">Офис или сервис — скоро</option>
             <option value="food" disabled data-i18n="cat.food">Фастфуд или доставка — скоро</option>
@@ -94,10 +95,11 @@
   <main class="wrap cab-main" id="cab" hidden>
     <h1 class="cab-title" id="cabTitle"></h1>
     <nav class="cab-tabs" role="tablist">
-      <button role="tab" data-tab="calendar" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span data-i18n="tab.calendar">Календарь</span></button>
-      <button role="tab" data-tab="services" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span data-i18n="tab.services">Услуги</span></button>
+      <button role="tab" data-tab="products" data-for="shop" aria-selected="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 8h12l-1 12H7z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></svg><span data-i18n="tab.products">Товары</span></button>
+      <button role="tab" data-tab="calendar" data-for="barber" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span data-i18n="tab.calendar">Календарь</span></button>
+      <button role="tab" data-tab="services" data-for="barber" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span data-i18n="tab.services">Услуги</span></button>
       <button role="tab" data-tab="settings" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></svg><span data-i18n="tab.settings">Настройки</span></button>
-      <button role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/></svg><span data-i18n="tab.stats">Аналитика</span></button>
+      <button role="tab" data-tab="stats" data-for="barber" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9"/></svg><span data-i18n="tab.stats">Аналитика</span></button>
       <button role="tab" data-tab="test" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H6a2 2 0 0 1-2-2z"/></svg><span data-i18n="tab.test">Проверить</span></button>
     </nav>
 
@@ -113,6 +115,15 @@
         </div>
       </div>
       <div class="day-list" id="dayList"></div>
+    </section>
+
+    <!-- products (shops) -->
+    <section class="pane" data-pane="products" hidden>
+      <div class="pane-head">
+        <div><h2 data-i18n="pr.title">Товары из постов</h2><p class="muted" data-i18n="pr.sub">Вставьте ссылку на пост в Instagram и напишите, что в нём и сколько стоит. Клиент перешлёт этот пост в Direct — ассистент ответит по вашему описанию.</p></div>
+        <button class="btn btn-primary btn-sm" id="addProduct"><span>＋</span> <span data-i18n="pr.add">Товар</span></button>
+      </div>
+      <div class="pr-list" id="prList"></div>
     </section>
 
     <!-- services -->
@@ -143,9 +154,13 @@
           <label class="field"><span data-i18n="set.name">Название</span><input class="input" name="shop_name" maxlength="60"></label>
           <label class="field" hidden><span data-i18n="set.spoken">Как ассистент произносит название (армянскими буквами)</span><input class="input" name="shop_name_spoken" maxlength="60" placeholder="Բլեյդ բարբեր շոփ"></label>
           <label class="field"><span data-i18n="set.address">Адрес</span><input class="input" name="address" maxlength="120"></label>
-          <label class="field"><span data-i18n="set.barbers">Сколько клиентов можно принять одновременно (мастеров)</span><input class="input" name="barbers" type="number" min="1" max="20"></label>
+          <label class="field" data-for="barber"><span data-i18n="set.barbers">Сколько клиентов можно принять одновременно (мастеров)</span><input class="input" name="barbers" type="number" min="1" max="20"></label>
         </div>
-        <div class="set-card">
+        <div class="set-card" data-for="shop" hidden>
+          <h3 data-i18n="set.delivery">Доставка и оплата</h3>
+          <label class="field"><span data-i18n="set.deliveryHint">Ассистент скажет это клиенту, когда нужно.</span><textarea class="input" name="delivery" rows="3" maxlength="600" data-i18n-ph="set.deliveryPh" placeholder="Доставка по Еревану бесплатно, 1–2 дня. Оплата наличными или картой при получении."></textarea></label>
+        </div>
+        <div class="set-card" data-for="barber">
           <h3 data-i18n="br.title">Барберы</h3>
           <p class="muted" data-i18n="br.sub">Добавьте мастеров — ассистент спросит клиента, к кому записать, и запишет по графику этого мастера.</p>
           <div id="barbersList" class="barbers-list"></div>
