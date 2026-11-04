@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = Object.fromEntries(readFileSync(join(ROOT, "backend/.env"), "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]));
-const SITE = "https://barber-voice-agent.weboostai.workers.dev";
+const SITE = "https://umnik.weboostai.workers.dev";
 const LIMIT = Number(process.env.LIMIT ?? 2.8);
 const CHAT_STEP = 0.0045; // measured average per chat reply with tools (gpt-6.1-terra)
 let spent = 0;

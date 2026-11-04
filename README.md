@@ -1,6 +1,6 @@
 # UMNIK — AI chat assistant for businesses (website chat + Instagram Direct)
 
-Landing page with a live chat demo + owner cabinet (`/app/`). Live: https://barber-voice-agent.weboostai.workers.dev
+Landing page with a live chat demo + owner cabinet (`/app/`). Live: https://umnik.weboostai.workers.dev
 
 > **Voice is off the live site since 2026-11-01** (Armenian recognition isn't reliable enough yet). All voice code is kept in
 > [`voice-lab/`](voice-lab/README.md); backend voice endpoints answer 404 unless `VOICE_ENABLED=1`. Run it locally with `scripts/voice-lab.sh`.

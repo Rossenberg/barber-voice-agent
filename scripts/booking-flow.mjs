@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = Object.fromEntries(readFileSync(join(ROOT, "backend/.env"), "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]));
-const SITE = "https://barber-voice-agent.weboostai.workers.dev";
+const SITE = "https://umnik.weboostai.workers.dev";
 let cookie = "", cost = 0;
 async function api(path, body, method = body ? "POST" : "GET") {
   const res = await fetch(SITE + path, { method, headers: { origin: SITE, "content-type": "application/json", ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });

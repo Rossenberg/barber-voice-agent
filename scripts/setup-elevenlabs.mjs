@@ -15,8 +15,8 @@ const ENV_FILE = join(ROOT, "backend/.env");
 const STATE_FILE = join(ROOT, "agent/elevenlabs.json");
 const CONFIG_JS = join(ROOT, "web/config.js");
 
-const BACKEND_URL = "https://barber-voice-agent.weboostai.workers.dev";
-const SITE_HOSTS = ["barber-voice-agent.weboostai.workers.dev", "localhost"];
+const BACKEND_URL = "https://umnik.weboostai.workers.dev";
+const SITE_HOSTS = ["umnik.weboostai.workers.dev", "localhost"];
 const API = "https://api.elevenlabs.io";
 
 const VOICES = {

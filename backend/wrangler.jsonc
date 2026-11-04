@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "barber-voice-agent",
+  "name": "umnik",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,

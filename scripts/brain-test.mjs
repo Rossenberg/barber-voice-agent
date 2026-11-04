@@ -17,7 +17,7 @@ import { CASES } from "./brain-cases.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = Object.fromEntries(readFileSync(join(ROOT, "backend/.env"), "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).trim()]));
-const SITE = "https://barber-voice-agent.weboostai.workers.dev";
+const SITE = "https://umnik.weboostai.workers.dev";
 const ORIGIN = { origin: SITE };
 const TEST_PHONE = "+37499000111"; // the test caller's "caller ID"; its bookings are cancelled after each case
 const EFFORT = process.env.EFFORT ?? "";
