@@ -836,9 +836,12 @@ async function assistantInstructions(env: Env, opts: { biz: number; name: string
 /** Mints a short-lived key so the browser can talk to OpenAI Realtime (speech in, speech out) directly. */
 const TRANSCRIBE_HINT = "Զանգ վարսավիրանոց, երևանյան խոսակցական՝ գրանցում, կտրվածք, ֆեյդ, թրաշ, մորուք, դզել, ֆենով, ներկել, ներկում, կողքերը, մաշինկայով, էսօր, էգուց, վաղը, մյուս օրը, երկուշաբթի, երեքշաբթի, չորեքշաբթի, հինգշաբթի, ուրբաթ, շաբաթ, կիրակի, ժամը, կեսին, ուշ, շուտ, առավոտյան, իրիկունը, գիշերը, հասցեն, ախպեր ջան, կարա՞մ գամ։ Անուններ՝ Արամ, Արման, Արթուր, Աշոտ, Գևորգ, Գոռ, Դավիթ, Էդգար, Կարեն, Հայկ, Հովհաննես, Մհեր, Նարեկ, Սամվել, Սարգիս, Վահագն, Վահե, Տիգրան, Անի, Աննա, Մարիամ, Լուսինե։ Հեռախոսահամարը թվերով՝ զրո իննսունինը, քսանյոթ, քսանութ, հիսունհինգ, վաթսուներկու, ութսունութ։";
 
+const EN_DEMO_RULE = "LANGUAGE OVERRIDE (English demo): this call/chat is a demo for an English-speaking client. Speak and write ONLY natural, friendly English from the first word to the last, even though the instructions above are written for Armenian callers; ignore every rule about Armenian wording, «Դուք», the phrasebook and the _hy fields (say times in English, e.g. \"at ten thirty\"). Your name is {name}. Keep replies very short.";
+
 async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
   const voice = params.get("voice") === "male" ? "cedar" : "marin";
+  const en = params.get("lang") === "en"; // English demo for foreign clients (voice-lab /try/?lang=en)
   // "text": OpenAI only hears and thinks; the page speaks the reply with ElevenLabs' Armenian voices
   // (OpenAI's own Armenian voice has a strong foreign accent).
   const textOnly = params.get("speech") === "elevenlabs";
@@ -853,7 +856,8 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
   const sttModel = ["gpt-transcribe", "gpt-live-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"].includes(params.get("stt") ?? "") ? params.get("stt")! : "gpt-transcribe";
   const biz = await bizBySlug(env.DB, params.get("biz"));
   const conv = `call-${crypto.randomUUID()}`;
-  const instructions = await assistantInstructions(env, { biz, name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice", conv });
+  const baseInstructions = await assistantInstructions(env, { biz, name: voice === "cedar" ? "Արամ" : "Անի", callerPhone, channel: "voice", conv });
+  const instructions = en ? `${baseInstructions}\n\n${EN_DEMO_RULE.replace("{name}", voice === "cedar" ? "Aram" : "Ani")}` : baseInstructions;
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
@@ -872,7 +876,7 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
           input: {
             // Vocabulary hint: on real recordings with noise as loud as the voice it took phone numbers from
             // ~3/9 right to 8/9, and it adds nothing on noise alone or on ordinary phrases.
-            transcription: { model: sttModel, language: "hy", prompt: TRANSCRIBE_HINT },
+            transcription: en ? { model: sttModel, language: "en" } : { model: sttModel, language: "hy", prompt: TRANSCRIBE_HINT },
             // OpenAI's noise reduction stays off: it cut the hissing «քս» of «քսանյոթ» (a real number in street
             // noise + a passing car: 4/4 right without it, 1/4 with near_field or far_field). ?nr= to compare.
             ...(nr === "near" || nr === "far" ? { noise_reduction: { type: `${nr}_field` } } : {}),
@@ -891,13 +895,13 @@ async function realtimeSession(env: Env, req: Request): Promise<Response> {
 
 /** Streams Armenian speech (raw 24 kHz 16-bit PCM) for one reply, for the /realtime/ hybrid mode. */
 async function ttsStream(env: Env, req: Request): Promise<Response> {
-  const { text, voice, prev, seed } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string; prev?: string; seed?: number };
+  const { text, voice, prev, seed, lang } = (await req.json().catch(() => ({}))) as { text?: string; voice?: string; prev?: string; seed?: number; lang?: string };
   const clean = cleanText(text, 500);
   if (!clean) return json({ error: "no_text" }, 400);
   const voiceId = voice === "male" ? "JBFqnCBsd6RMkjVDRZzb" : "Xb7hH8MSUJpSbSDYk0k2"; // George / Alice, as on the agent
   // Every reply is generated on its own: with default settings the voice drifted mid-call until it sounded like
   // someone else. Higher stability, one seed per call and the previous reply as context keep it the same person.
-  const base = { text: clean, model_id: "eleven_v4_turbo", language_code: "hy", voice_settings: { stability: 0.7, similarity_boost: 0.9, style: 0, use_speaker_boost: true } };
+  const base = { text: clean, model_id: "eleven_v4_turbo", language_code: lang === "en" ? "en" : "hy", voice_settings: { stability: 0.7, similarity_boost: 0.9, style: 0, use_speaker_boost: true } };
   const extra = { ...(Number.isInteger(seed) ? { seed: Math.abs(Number(seed)) % 4294967295 } : {}), ...(prev ? { previous_text: cleanText(prev, 500) } : {}) };
   const call = (body: object) => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000`, {
     method: "POST",

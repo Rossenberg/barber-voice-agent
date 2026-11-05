@@ -16,7 +16,8 @@ import { createListener } from "/listener.js";
  * @param {(el: HTMLElement, ms: number) => void} [ui.latency]       first sound of a reply, ms after the caller stopped
  * @param {(speaking: boolean) => void} [ui.speaking]
  */
-export async function startCall({ voice, speech = "elevenlabs", caller = "", biz = "" }, ui) {
+export async function startCall({ voice, speech = "elevenlabs", caller = "", biz = "", lang = "" }, ui) {
+  const en = lang === "en";
   const params = new URLSearchParams(location.search);
   const DEBUG = params.has("debug");
   const actx = new AudioContext(); // created right after the tap so iPhone allows sound
@@ -186,7 +187,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     const gen = speakGen;
     usage({ kind: "tts", chars: text.length });
     // same seed for the whole call and the previous reply as context, so the voice stays the same person
-    const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice, seed: voiceSeed, prev: spokenBefore }) });
+    const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice, seed: voiceSeed, prev: spokenBefore, ...(en ? { lang: "en" } : {}) }) });
     spokenBefore = text;
     if (!res.ok || !res.body) return void ui.add(ui.t("voice.error"), "tool");
     if (gen !== speakGen || ended) return void res.body.cancel();
@@ -399,7 +400,9 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     let greeting = "";
     const greeted = cfgReady.then((cfg) => {
       if (!cfg.enabled) throw new Error("disabled");
-      greeting = cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
+      greeting = en
+        ? `Hi, thanks for calling ${cfg.shop_name}! This is ${voice === "male" ? "Aram" : "Ani"}. How can I help you?`
+        : cfg.greeting.replaceAll("{shop}", cfg.shop_name_spoken || cfg.shop_name).replaceAll("{name}", voice === "male" ? "Արամ" : "Անի");
       if (speech === "elevenlabs") speak(greeting, ui.add(greeting, "agent"));
     });
     // Our own ears: Silero ends the caller's phrases (and records each one for the log). ?turn=server keeps OpenAI's VAD.
@@ -419,7 +422,7 @@ export async function startCall({ voice, speech = "elevenlabs", caller = "", biz
     // the session needs to know the turn mode: Silero unless ?turn=server (if it fails to load, server VAD is set below)
     const wantManual = params.get("turn") !== "server";
     const extra = ["stt", "effort", "nr"].map((k) => (params.get(k) ? `&${k}=${encodeURIComponent(params.get(k))}` : "")).join("");
-    const sessReady = fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${biz ? `&biz=${encodeURIComponent(biz)}` : ""}&turn=${wantManual ? "manual" : "server"}${extra}`, { method: "POST" }).then((r) => r.json());
+    const sessReady = fetch(`/api/realtime-session?voice=${voice}&speech=${speech}&caller=${encodeURIComponent(caller)}${biz ? `&biz=${encodeURIComponent(biz)}` : ""}&turn=${wantManual ? "manual" : "server"}${extra}${en ? "&lang=en" : ""}`, { method: "POST" }).then((r) => r.json());
 
     const [sess, mic, rec] = await Promise.all([sessReady, micReady, listenerReady, greeted]);
     recorder = rec;

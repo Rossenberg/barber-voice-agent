@@ -3,6 +3,15 @@
 import { startCall } from "/realtime-call.js";
 
 const T = {
+  en: {
+    back: "← Back", call: "Call", chat: "Chat", end: "End call", ani: "Ani", aram: "Aram", female: "Female voice", male: "Male voice",
+    callerSum: "Caller number", callerHint: "The assistant uses this number to find bookings to reschedule or cancel. On a real phone line it is detected automatically.",
+    notFound: "Business not found", on: "Assistant is on", off: "Assistant is off", ready: "Ready", connecting: "Connecting…", live: "Live",
+    idle: "Tap “Call” and speak like on a normal phone call", mic: "Allow microphone access", listening: "Listening…", speaking: "Speaking…", hearing: "Thinking…",
+    ended: "Call ended.", quota: "Technical issue: the assistant is temporarily unavailable. Please try again later.", micBlocked: "Microphone is blocked. Allow it in your browser.", error: "Couldn’t connect, please try again later.", disabled: "The assistant is turned off.",
+    placeholder: "Type a message…", chatError: "Couldn’t reply, please try again.", booked: "Booked ✓",
+    check: "Checking the calendar…", checked: "Calendar checked", book: "Booking…", bookedTool: "Booked ✓", failed: "Couldn’t book", toolError: "System error",
+  },
   ru: {
     back: "← В кабинет", call: "Позвонить", chat: "Написать", end: "Завершить", ani: "Ани", aram: "Арам", female: "Женский голос", male: "Мужской голос",
     callerSum: "Номер звонящего", callerHint: "По этому номеру ассистент находит записи, чтобы перенести или отменить их. На настоящей линии номер определится сам.",
@@ -24,7 +33,8 @@ const T = {
 };
 const $ = (id) => document.getElementById(id);
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
-const lang = T[store.get("bvLang")] ? store.get("bvLang") : "ru";
+const urlLang = new URLSearchParams(location.search).get("lang");
+const lang = T[urlLang] ? urlLang : T[store.get("bvLang")] ? store.get("bvLang") : "ru";
 const t = (k) => T[lang][k] ?? k;
 const biz = new URLSearchParams(location.search).get("biz") ?? "";
 let config = null, voice = "female", call = null, raf = 0;
@@ -32,6 +42,7 @@ let config = null, voice = "female", call = null, raf = 0;
 document.documentElement.lang = lang;
 document.querySelectorAll("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
 $("chatInput").placeholder = t("placeholder");
+if (lang === "en") { document.title = "Assistant demo — UMNIK"; document.querySelectorAll(".voice .av").forEach((el) => (el.textContent = "A")); }
 $("callerPhone").value = store.get("bvCaller") ?? "";
 $("callerPhone").addEventListener("change", (e) => store.set("bvCaller", e.target.value.trim()));
 
@@ -84,7 +95,7 @@ $("startBtn").addEventListener("click", async () => {
   setStatus("busy");
   label("mic");
   try {
-    call = await startCall({ voice, caller: $("callerPhone").value.trim(), biz }, {
+    call = await startCall({ voice, caller: $("callerPhone").value.trim(), biz, lang: lang === "en" ? "en" : "" }, {
       add: (text, cls) => add(text, cls),
       t: callText,
       state: (s) => { label({ hearing: "listening", answering: "hearing", failed: "error", quota: "quota" }[s] ?? "listening"); if (s === "failed") stop("error"); if (s === "quota") stop("quota"); },
@@ -110,7 +121,7 @@ document.querySelectorAll(".voice").forEach((b) => b.addEventListener("click", (
 let chatId = null, history = [], busy = false;
 async function openChat() {
   if (history.length || !config) return;
-  const greeting = config.greeting.replaceAll("{shop}", config.shop_name).replaceAll("{name}", "Անի");
+  const greeting = lang === "en" ? `Hi! This is Ani from ${config.shop_name}. How can I help you?` : config.greeting.replaceAll("{shop}", config.shop_name).replaceAll("{name}", "Անի");
   history.push({ role: "assistant", content: greeting });
   add(greeting, "agent", "chatLog");
 }
